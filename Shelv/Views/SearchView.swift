@@ -731,6 +731,7 @@ struct SearchView: View {
                 guard !trimmed.isEmpty else { return }
                 result = nil
                 lyricsResults = []
+                isSearching = true
                 searchTask = Task {
                     await performSearch(query: trimmed)
                 }
@@ -755,9 +756,13 @@ struct SearchView: View {
                 guard !trimmed.isEmpty else {
                     result = nil
                     lyricsResults = []
+                    isSearching = false
                     automaticallyRecordedQuery = nil
                     return
                 }
+                result = nil
+                lyricsResults = []
+                isSearching = true
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(400))
                     guard !Task.isCancelled else { return }
@@ -1076,7 +1081,9 @@ struct SearchView: View {
         else {
             return
         }
-        isSearching = false
+        if hasResults {
+            isSearching = false
+        }
         if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
             var results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
             let selection = musicLibraries.snapshot
@@ -1099,6 +1106,7 @@ struct SearchView: View {
                   query == trimmedQuery
             else { return }
             lyricsResults = results
+            isSearching = false
             let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
             if !missing.isEmpty {
                 for item in missing {
@@ -1127,6 +1135,8 @@ struct SearchView: View {
                     }
                 }
             }
+        } else {
+            isSearching = false
         }
     }
 
@@ -1139,8 +1149,10 @@ struct SearchView: View {
             return
         }
         let records = await DownloadDatabase.shared.search(serverId: sid, query: query, limit: 100)
-        guard requestedServerID == serverStore.activeServerID,
-              requestedServerRevision == serverStore.activeServerRevision
+        guard !Task.isCancelled,
+              requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision,
+              query == trimmedQuery
         else { return }
         let songs = records.map { $0.toDownloadedSong().asSong() }
         let q = query.lowercased()
@@ -1153,8 +1165,10 @@ struct SearchView: View {
         result = SearchResult(artist: matchedArtists, album: matchedAlbums, song: songs)
         let lyricsSid = serverStore.activeServer?.id.uuidString ?? sid
         let allLyrics = await LyricsService.shared.searchLyrics(text: query, serverId: lyricsSid)
-        guard requestedServerID == serverStore.activeServerID,
-              requestedServerRevision == serverStore.activeServerRevision
+        guard !Task.isCancelled,
+              requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision,
+              query == trimmedQuery
         else { return }
         let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
         lyricsResults = allLyrics.filter { downloadedIds.contains($0.songId) }

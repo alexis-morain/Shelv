@@ -12,6 +12,7 @@ struct SearchView: View {
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
+    @State private var isLyricsSearching = false
     @State private var recentSearches: [String] = []
     @State private var automaticallyRecordedQuery: String?
 
@@ -25,6 +26,10 @@ struct SearchView: View {
 
     private var trimmedQuery: String {
         vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var shouldShowSearchProgress: Bool {
+        vm.isLoading || (vm.isEmpty && lyricsResults.isEmpty && isLyricsSearching)
     }
 
     var body: some View {
@@ -54,7 +59,7 @@ struct SearchView: View {
 
             Divider()
 
-            if vm.isLoading {
+            if shouldShowSearchProgress {
                 ProgressView(String(localized: "searching"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if trimmedQuery.isEmpty && !recentSearches.isEmpty {
@@ -192,13 +197,15 @@ struct SearchView: View {
         }
         .onChange(of: musicLibraries.revision) { _, _ in
             guard !OfflineModeService.shared.isOffline,
-                  trimmedQuery.count >= 2
+                  !trimmedQuery.isEmpty
             else { return }
             searchTask?.cancel()
             lyricsTask?.cancel()
             vm.clearResults()
             lyricsResults = []
             let trimmed = trimmedQuery
+            vm.prepareForSearch()
+            isLyricsSearching = true
             searchTask = Task { await searchAndRecord(query: trimmed) }
             lyricsTask = Task { await performLyricsSearch(query: trimmed) }
         }
@@ -207,7 +214,10 @@ struct SearchView: View {
             lyricsTask?.cancel()
 
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.count >= 2 {
+            if !trimmed.isEmpty {
+                vm.prepareForSearch()
+                lyricsResults = []
+                isLyricsSearching = true
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(300))
                     guard !Task.isCancelled else { return }
@@ -223,6 +233,7 @@ struct SearchView: View {
                 if trimmed.isEmpty {
                     automaticallyRecordedQuery = nil
                 }
+                isLyricsSearching = false
                 lyricsResults = []
                 vm.clearResults()
             }
@@ -231,6 +242,7 @@ struct SearchView: View {
             searchTask?.cancel()
             lyricsTask?.cancel()
             vm.cancelSearch()
+            isLyricsSearching = false
         }
     }
 
@@ -340,7 +352,12 @@ struct SearchView: View {
         automaticallyRecordedQuery = nil
         reloadSearchHistory()
         let trimmed = trimmedQuery
-        guard trimmed.count >= 2 else { return }
+        guard !trimmed.isEmpty else {
+            isLyricsSearching = false
+            return
+        }
+        vm.prepareForSearch()
+        isLyricsSearching = true
         searchTask = Task { await searchAndRecord(query: trimmed) }
         lyricsTask = Task { await performLyricsSearch(query: trimmed) }
     }
@@ -349,16 +366,21 @@ struct SearchView: View {
         let requestedServerID = appState.serverStore.activeServerID
         let requestedServerRevision = appState.serverStore.activeServerRevision
         let serverId = appState.serverStore.activeServerID?.uuidString ?? ""
-        guard !serverId.isEmpty else { return }
+        guard !serverId.isEmpty else {
+            isLyricsSearching = false
+            return
+        }
         var results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
         guard !Task.isCancelled,
               requestedServerID == appState.serverStore.activeServerID,
-              requestedServerRevision == appState.serverStore.activeServerRevision
+              requestedServerRevision == appState.serverStore.activeServerRevision,
+              query == trimmedQuery
         else { return }
         if OfflineModeService.shared.isOffline {
             let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
             results = results.filter { downloadedIds.contains($0.songId) }
             lyricsResults = results
+            isLyricsSearching = false
             return
         }
         let selection = musicLibraries.snapshot
@@ -377,9 +399,11 @@ struct SearchView: View {
         guard !Task.isCancelled,
               requestedServerID == appState.serverStore.activeServerID,
               requestedServerRevision == appState.serverStore.activeServerRevision,
-              selection.selectionKey == musicLibraries.snapshot.selectionKey
+              selection.selectionKey == musicLibraries.snapshot.selectionKey,
+              query == trimmedQuery
         else { return }
         lyricsResults = results
+        isLyricsSearching = false
         let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
         for item in missing {
             guard !Task.isCancelled,
