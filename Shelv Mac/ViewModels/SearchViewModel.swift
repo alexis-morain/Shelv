@@ -14,6 +14,14 @@ class SearchViewModel: ObservableObject {
 
     var isEmpty: Bool { artists.isEmpty && albums.isEmpty && songs.isEmpty }
 
+    func prepareForSearch() {
+        searchTask?.cancel()
+        artists = []
+        albums = []
+        songs = []
+        isLoading = !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func search() async {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let requestedServerID = AppState.shared.serverStore.activeServerID

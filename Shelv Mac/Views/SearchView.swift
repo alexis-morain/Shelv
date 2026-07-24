@@ -11,6 +11,7 @@ struct SearchView: View {
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
+    @State private var isLyricsSearching = false
 
     private var showFavoriteActions: Bool {
         personalizationVisibility.showFavoriteActions
@@ -18,6 +19,10 @@ struct SearchView: View {
 
     private var showPlaylistActions: Bool {
         personalizationVisibility.showPlaylistActions
+    }
+
+    private var shouldShowSearchProgress: Bool {
+        vm.isLoading || (vm.isEmpty && lyricsResults.isEmpty && isLyricsSearching)
     }
 
     var body: some View {
@@ -43,7 +48,7 @@ struct SearchView: View {
 
             Divider()
 
-            if vm.isLoading {
+            if shouldShowSearchProgress {
                 ProgressView(String(localized: "searching"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if vm.isEmpty && lyricsResults.isEmpty && !vm.query.isEmpty {
@@ -169,7 +174,10 @@ struct SearchView: View {
             lyricsTask?.cancel()
 
             let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.count >= 2 {
+            if !trimmed.isEmpty {
+                vm.prepareForSearch()
+                lyricsResults = []
+                isLyricsSearching = true
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(300))
                     guard !Task.isCancelled else { return }
@@ -182,6 +190,7 @@ struct SearchView: View {
                     await performLyricsSearch(query: trimmed)
                 }
             } else {
+                isLyricsSearching = false
                 lyricsResults = []
                 vm.clearResults()
             }
@@ -190,6 +199,7 @@ struct SearchView: View {
             searchTask?.cancel()
             lyricsTask?.cancel()
             vm.cancelSearch()
+            isLyricsSearching = false
         }
     }
 
@@ -199,7 +209,9 @@ struct SearchView: View {
         vm.clearResults()
         lyricsResults = []
         let trimmed = vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 2 else { return }
+        guard !trimmed.isEmpty else { return }
+        vm.prepareForSearch()
+        isLyricsSearching = true
         searchTask = Task { await vm.search() }
         lyricsTask = Task { await performLyricsSearch(query: trimmed) }
     }
@@ -208,19 +220,25 @@ struct SearchView: View {
         let requestedServerID = appState.serverStore.activeServerID
         let requestedServerRevision = appState.serverStore.activeServerRevision
         let serverId = appState.serverStore.activeServerID?.uuidString ?? ""
-        guard !serverId.isEmpty else { return }
+        guard !serverId.isEmpty else {
+            isLyricsSearching = false
+            return
+        }
         var results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
         guard !Task.isCancelled,
               requestedServerID == appState.serverStore.activeServerID,
-              requestedServerRevision == appState.serverStore.activeServerRevision
+              requestedServerRevision == appState.serverStore.activeServerRevision,
+              query == vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
         else { return }
         if OfflineModeService.shared.isOffline {
             let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
             results = results.filter { downloadedIds.contains($0.songId) }
             lyricsResults = results
+            isLyricsSearching = false
             return
         }
         lyricsResults = results
+        isLyricsSearching = false
         let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
         for item in missing {
             guard !Task.isCancelled,

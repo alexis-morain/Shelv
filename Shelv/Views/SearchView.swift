@@ -627,8 +627,12 @@ struct SearchView: View {
                 guard !newValue.isEmpty else {
                     result = nil
                     lyricsResults = []
+                    isSearching = false
                     return
                 }
+                result = nil
+                lyricsResults = []
+                isSearching = true
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(400))
                     guard !Task.isCancelled else { return }
@@ -896,10 +900,12 @@ struct SearchView: View {
         isSearching = true
         if offlineMode.isOffline {
             await performOfflineSearch(query: query)
-            if requestedServerID == serverStore.activeServerID,
-               requestedServerRevision == serverStore.activeServerRevision {
-                isSearching = false
-            }
+            guard !Task.isCancelled,
+                  requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  query == self.query
+            else { return }
+            isSearching = false
             return
         }
         do {
@@ -933,7 +939,9 @@ struct SearchView: View {
               requestedServerRevision == serverStore.activeServerRevision,
               query == self.query
         else { return }
-        isSearching = false
+        if hasResults {
+            isSearching = false
+        }
         if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
             let results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
             guard !Task.isCancelled,
@@ -942,6 +950,7 @@ struct SearchView: View {
                   query == self.query
             else { return }
             lyricsResults = results
+            isSearching = false
             let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
             if !missing.isEmpty {
                 for item in missing {
@@ -968,6 +977,8 @@ struct SearchView: View {
                     }
                 }
             }
+        } else {
+            isSearching = false
         }
     }
 
@@ -980,8 +991,10 @@ struct SearchView: View {
             return
         }
         let records = await DownloadDatabase.shared.search(serverId: sid, query: query, limit: 100)
-        guard requestedServerID == serverStore.activeServerID,
-              requestedServerRevision == serverStore.activeServerRevision
+        guard !Task.isCancelled,
+              requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision,
+              query == self.query
         else { return }
         let songs = records.map { $0.toDownloadedSong().asSong() }
         let q = query.lowercased()
@@ -994,8 +1007,10 @@ struct SearchView: View {
         result = SearchResult(artist: matchedArtists, album: matchedAlbums, song: songs)
         let lyricsSid = serverStore.activeServer?.id.uuidString ?? sid
         let allLyrics = await LyricsService.shared.searchLyrics(text: query, serverId: lyricsSid)
-        guard requestedServerID == serverStore.activeServerID,
-              requestedServerRevision == serverStore.activeServerRevision
+        guard !Task.isCancelled,
+              requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision,
+              query == self.query
         else { return }
         let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
         lyricsResults = allLyrics.filter { downloadedIds.contains($0.songId) }
