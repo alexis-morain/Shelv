@@ -93,56 +93,71 @@ struct MainWindowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                NavigationSplitView {
-                    SidebarView(
-                        selection: $appState.selectedSidebar,
-                        selectedPlaylist: $appState.selectedPlaylist
-                    )
-                    .environmentObject(libraryStore)
-                } detail: {
-                    NavigationStack(path: $appState.navigationPath) {
-                        sectionRoot
-                            .navigationDestination(for: Album.self) { album in
-                                AlbumDetailView(albumId: album.id, albumName: album.name, initialCoverArtId: album.coverArt)
-                                    .environmentObject(libraryStore)
-                            }
-                            .navigationDestination(for: Artist.self) { artist in
-                                ArtistDetailView(artistId: artist.id, artistName: artist.name)
-                                    .environmentObject(libraryStore)
-                            }
-                            .navigationDestination(for: FavoritesScope.self) { scope in
-                                FavoritesView(scope: scope)
-                                    .environmentObject(libraryStore)
-                            }
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    NavigationSplitView {
+                        SidebarView(
+                            selection: $appState.selectedSidebar,
+                            selectedPlaylist: $appState.selectedPlaylist
+                        )
+                        .environmentObject(libraryStore)
+                    } detail: {
+                        NavigationStack(path: $appState.navigationPath) {
+                            sectionRoot
+                                .frame(
+                                    minWidth: MacMainWindowLayout.contentMinimumWidth,
+                                    maxWidth: .infinity,
+                                    maxHeight: .infinity
+                                )
+                                .navigationDestination(for: Album.self) { album in
+                                    AlbumDetailView(albumId: album.id, albumName: album.name, initialCoverArtId: album.coverArt)
+                                        .environmentObject(libraryStore)
+                                }
+                                .navigationDestination(for: Artist.self) { artist in
+                                    ArtistDetailView(artistId: artist.id, artistName: artist.name)
+                                        .environmentObject(libraryStore)
+                                }
+                                .navigationDestination(for: FavoritesScope.self) { scope in
+                                    FavoritesView(scope: scope)
+                                        .environmentObject(libraryStore)
+                                }
+                        }
+                        .frame(minWidth: MacMainWindowLayout.contentMinimumWidth)
+                        .navigationSplitViewColumnWidth(
+                            min: MacMainWindowLayout.contentMinimumWidth,
+                            ideal: MacMainWindowLayout.contentMinimumWidth,
+                            max: .infinity
+                        )
+                        .environmentObject(libraryStore)
                     }
-                    .environmentObject(libraryStore)
-                }
-                .onChange(of: serverStore.activeServerID) { _, _ in
-                    appState.player.stop()
-                    QueueSyncService.shared.handleServerChange()
-                    DiscoverViewModel.shared.reset()
-                    RadioStationStore.shared.resetInMemory()
-                    #if DEBUG
-                    // Demo-Server aktiv -> festes Player-Standbild (nach stop(), sonst sofort
-                    // wieder gelöscht). Wie iOS-ContentView.
-                    if SubsonicAPIService.shared.isDemoActive {
-                        appState.player.ensureDemoStandby(force: true)
+                    .frame(minWidth: MacMainWindowLayout.navigationMinimumWidth)
+                    .layoutPriority(1)
+                    .onChange(of: serverStore.activeServerID) { _, _ in
+                        appState.player.stop()
+                        QueueSyncService.shared.handleServerChange()
+                        DiscoverViewModel.shared.reset()
+                        RadioStationStore.shared.resetInMemory()
+                        #if DEBUG
+                        // Demo-Server aktiv -> festes Player-Standbild (nach stop(), sonst sofort
+                        // wieder gelöscht). Wie iOS-ContentView.
+                        if SubsonicAPIService.shared.isDemoActive {
+                            appState.player.ensureDemoStandby(force: true)
+                        }
+                        #endif
                     }
-                    #endif
-                }
-                .background(Color(NSColor.windowBackgroundColor))
+                    .background(Color(NSColor.windowBackgroundColor))
 
-                if appState.activePanel != nil {
-                    Divider()
-                    sidePanelContent
-                        .frame(width: 410)
-                        .frame(maxHeight: .infinity)
-                        .background(Color(NSColor.windowBackgroundColor))
-                        .transition(.move(edge: .trailing))
+                    if appState.activePanel != nil {
+                        Divider()
+                        sidePanelContent
+                            .frame(width: MacMainWindowLayout.sidePanelWidth(for: geometry.size.width))
+                            .frame(maxHeight: .infinity)
+                            .background(Color(NSColor.windowBackgroundColor))
+                            .transition(.move(edge: .trailing))
+                    }
                 }
+                .animation(.easeInOut(duration: 0.2), value: appState.activePanel)
             }
-            .animation(.easeInOut(duration: 0.2), value: appState.activePanel)
 
             PlayerBarView()
                 .environmentObject(libraryStore)

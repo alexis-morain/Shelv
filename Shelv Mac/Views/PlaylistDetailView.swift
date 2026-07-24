@@ -19,7 +19,7 @@ struct PlaylistDetailView: View {
     }
 
     @ViewBuilder
-    private func playlistDownloadButtons(iconOnly: Bool) -> some View {
+    private func playlistDownloadButtons(iconOnly: Bool, compact: Bool) -> some View {
         let isMarked = downloadStore.downloadedPlaylistIds.contains(playlist.id)
         let remaining = isMarked ? songs.filter { !downloadStore.isDownloaded(songId: $0.id) }.count : 0
         if !isMarked && !offlineMode.isOffline {
@@ -33,7 +33,7 @@ struct PlaylistDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(themeColor)
         }
         if isMarked && remaining > 0 && !offlineMode.isOffline {
@@ -47,7 +47,7 @@ struct PlaylistDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(themeColor)
         }
         if isMarked {
@@ -62,14 +62,14 @@ struct PlaylistDetailView: View {
                 .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(.red)
         }
     }
 
     @ViewBuilder
-    private func actionButtons(iconOnly: Bool) -> some View {
-        HStack(spacing: 10) {
+    private func actionButtons(iconOnly: Bool, compact: Bool) -> some View {
+        HStack(spacing: compact ? 6 : 10) {
             Button {
                 if !songs.isEmpty { appState.player.play(songs: songs) }
             } label: {
@@ -79,7 +79,7 @@ struct PlaylistDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(themeColor)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(isLoading || songs.isEmpty)
 
             Button {
@@ -90,7 +90,7 @@ struct PlaylistDetailView: View {
                     .frame(minWidth: iconOnly ? nil : 100)
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(isLoading || songs.isEmpty)
 
             Button {
@@ -101,7 +101,7 @@ struct PlaylistDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(isLoading || songs.isEmpty)
 
             Button {
@@ -112,13 +112,15 @@ struct PlaylistDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(isLoading || songs.isEmpty)
 
             if enableDownloads && !songs.isEmpty {
-                playlistDownloadButtons(iconOnly: iconOnly)
+                playlistDownloadButtons(iconOnly: iconOnly, compact: compact)
             }
         }
+        .macActionButtonShape(iconOnly: iconOnly)
+        .fixedSize(horizontal: true, vertical: false)
     }
     @Environment(\.themeColor) private var themeColor
 
@@ -344,8 +346,9 @@ struct PlaylistDetailView: View {
                     Spacer(minLength: 12)
 
                     ViewThatFits(in: .horizontal) {
-                        actionButtons(iconOnly: false)
-                        actionButtons(iconOnly: true)
+                        actionButtons(iconOnly: false, compact: false)
+                        actionButtons(iconOnly: true, compact: false)
+                        actionButtons(iconOnly: true, compact: true)
                     }
                 }
 

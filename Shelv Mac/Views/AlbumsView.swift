@@ -213,55 +213,66 @@ struct AlbumsView: View {
         isPreparingPlayback = false
     }
 
-    var body: some View {
-        let displayAlbums = self.displayAlbums
-        let lastAlbumID = displayAlbums.last?.id
-
-        VStack(spacing: 0) {
-            HStack {
+    @ViewBuilder
+    private func libraryToolbar(showsFilter: Bool) -> some View {
+        HStack {
+            if showsFilter {
                 TextField(String(localized: "filter"), text: $searchText)
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 220)
-                Spacer()
-                if showGenreFilter {
-                    Picker("\(String(localized: "genre")):", selection: genreSelection) {
-                        Text(String(localized: "all_genres")).tag("")
-                        ForEach(genreOptions) { option in
-                            Text(option.label).tag(option.name)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .tint(.primary)
-                    .frame(width: 180)
-                }
-                Picker("\(String(localized: "sort")):", selection: sortSelection) {
-                    ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
-                        Text(opt.label).tag(opt)
+                    .frame(minWidth: 160, idealWidth: 220, maxWidth: 220)
+            }
+            Spacer()
+            if showGenreFilter {
+                Picker("\(String(localized: "genre")):", selection: genreSelection) {
+                    Text(String(localized: "all_genres")).tag("")
+                    ForEach(genreOptions) { option in
+                        Text(option.label).tag(option.name)
                     }
                 }
                 .pickerStyle(.menu)
                 .tint(.primary)
                 .frame(width: 180)
-                if vm.sortOption.allowsDirection {
-                    Button {
-                        vm.albumSortDirection = vm.albumSortDirection == .ascending ? .descending : .ascending
-                    } label: {
-                        Image(systemName: vm.albumSortDirection == .ascending ? "arrow.up" : "arrow.down")
-                            .font(.title3)
-                    }
-                    .buttonStyle(.borderless)
-                    .help(vm.albumSortDirection == .ascending ? String(localized: "ascending") : String(localized: "descending"))
+            }
+            Picker("\(String(localized: "sort")):", selection: sortSelection) {
+                ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
+                    Text(opt.label).tag(opt)
                 }
-                Button { isGrid.toggle() } label: {
-                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+            }
+            .pickerStyle(.menu)
+            .tint(.primary)
+            .frame(width: 180)
+            if vm.sortOption.allowsDirection {
+                Button {
+                    vm.albumSortDirection = vm.albumSortDirection == .ascending ? .descending : .ascending
+                } label: {
+                    Image(systemName: vm.albumSortDirection == .ascending ? "arrow.up" : "arrow.down")
                         .font(.title3)
                 }
                 .buttonStyle(.borderless)
-                .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
-                playbackButtons
+                .help(vm.albumSortDirection == .ascending ? String(localized: "ascending") : String(localized: "descending"))
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
+            Button { isGrid.toggle() } label: {
+                Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
+            playbackButtons
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+    }
+
+    var body: some View {
+        let displayAlbums = self.displayAlbums
+        let lastAlbumID = displayAlbums.last?.id
+
+        VStack(spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                libraryToolbar(showsFilter: true)
+                    .frame(minWidth: MacMainWindowLayout.filterFieldVisibilityWidth)
+                libraryToolbar(showsFilter: false)
+            }
             .background(.bar)
 
             Divider()
