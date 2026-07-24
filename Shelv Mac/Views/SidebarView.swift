@@ -9,6 +9,7 @@ struct SidebarView: View {
     @ObservedObject private var pinStore = PinnedPlaylistStore.shared
     @Binding var selection: SidebarItem?
     @Binding var selectedPlaylist: Playlist?
+    var maximumWidth: CGFloat = MacMainWindowLayout.sidebarMaximumWidth
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
@@ -205,10 +206,10 @@ struct SidebarView: View {
         .padding(.horizontal, 8)
         .padding(.top, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .navigationSplitViewColumnWidth(
-            min: MacMainWindowLayout.sidebarMinimumWidth,
-            ideal: MacMainWindowLayout.sidebarPreferredWidth,
-            max: MacMainWindowLayout.sidebarMaximumWidth
+        .modifier(
+            AnimatedSidebarColumnWidth(
+                maximumWidth: maximumWidth
+            )
         )
         .task {
             if showFavoritesInLibrary && libraryStore.starredAlbums.isEmpty {
@@ -509,6 +510,23 @@ struct PlaylistSidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+private struct AnimatedSidebarColumnWidth: AnimatableModifier {
+    var maximumWidth: CGFloat
+
+    var animatableData: CGFloat {
+        get { maximumWidth }
+        set { maximumWidth = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.navigationSplitViewColumnWidth(
+            min: MacMainWindowLayout.sidebarMinimumWidth,
+            ideal: min(MacMainWindowLayout.sidebarPreferredWidth, maximumWidth),
+            max: maximumWidth
+        )
     }
 }
 

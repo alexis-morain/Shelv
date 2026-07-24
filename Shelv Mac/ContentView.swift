@@ -105,7 +105,10 @@ struct MainWindowView: View {
                     NavigationSplitView {
                         SidebarView(
                             selection: $appState.selectedSidebar,
-                            selectedPlaylist: $appState.selectedPlaylist
+                            selectedPlaylist: $appState.selectedPlaylist,
+                            maximumWidth: MacMainWindowLayout.sidebarMaximumWidth(
+                                for: navigationWidth
+                            )
                         )
                         .environmentObject(libraryStore)
                     } detail: {
