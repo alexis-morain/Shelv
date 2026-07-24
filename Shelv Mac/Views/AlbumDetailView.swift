@@ -212,8 +212,7 @@ struct AlbumDetailView: View {
             Button {
                 appState.player.play(songs: displaySongs)
             } label: {
-                Label(String(localized: "play"), systemImage: "play.fill")
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                MacPlayActionLabel(iconOnly: iconOnly, compact: compact)
                     .frame(minWidth: iconOnly ? nil : 110)
             }
             .buttonStyle(.borderedProminent)
@@ -419,6 +418,24 @@ struct AdaptiveLabelStyle: LabelStyle {
                 configuration.icon
                 configuration.title
             }
+        }
+    }
+}
+
+struct MacPlayActionLabel: View {
+    let iconOnly: Bool
+    let compact: Bool
+
+    var body: some View {
+        if iconOnly {
+            Image(systemName: "play.fill")
+                .font(.system(size: compact ? 15 : 17, weight: .semibold))
+                .frame(width: 18, height: 18)
+                .offset(x: 0.75)
+                .accessibilityLabel(Text(String(localized: "play")))
+        } else {
+            Label(String(localized: "play"), systemImage: "play.fill")
+                .labelStyle(AdaptiveLabelStyle(iconOnly: false))
         }
     }
 }

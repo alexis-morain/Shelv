@@ -39,7 +39,10 @@ struct Shelv_DesktopApp: App {
                 .environmentObject(LibraryViewModel.shared)
                 .environmentObject(DownloadStore.shared)
                 .environmentObject(OfflineModeService.shared)
-                .frame(minWidth: 1000, minHeight: 600)
+                .frame(
+                    minWidth: MacMainWindowLayout.windowMinimumWidth,
+                    minHeight: MacMainWindowLayout.windowMinimumHeight
+                )
                 .task { await LyricsStore.shared.setup() }
                 .task {
                     await serverStore.waitUntilReady()

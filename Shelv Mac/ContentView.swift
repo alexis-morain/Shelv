@@ -93,11 +93,21 @@ struct MainWindowView: View {
     var body: some View {
         VStack(spacing: 0) {
             GeometryReader { geometry in
+                let showsSidePanel = appState.activePanel != nil
+                let sidePanelWidth = MacMainWindowLayout.sidePanelWidth(for: geometry.size.width)
+                let navigationWidth = MacMainWindowLayout.navigationWidth(
+                    for: geometry.size.width,
+                    showsSidePanel: showsSidePanel
+                )
+
                 HStack(spacing: 0) {
                     NavigationSplitView {
                         SidebarView(
                             selection: $appState.selectedSidebar,
-                            selectedPlaylist: $appState.selectedPlaylist
+                            selectedPlaylist: $appState.selectedPlaylist,
+                            maximumWidth: MacMainWindowLayout.sidebarMaximumWidth(
+                                for: navigationWidth
+                            )
                         )
                         .environmentObject(libraryStore)
                     } detail: {
@@ -129,8 +139,7 @@ struct MainWindowView: View {
                         )
                         .environmentObject(libraryStore)
                     }
-                    .frame(minWidth: MacMainWindowLayout.navigationMinimumWidth)
-                    .layoutPriority(1)
+                    .frame(width: navigationWidth)
                     .onChange(of: serverStore.activeServerID) { _, _ in
                         appState.player.stop()
                         QueueSyncService.shared.handleServerChange()
@@ -146,10 +155,10 @@ struct MainWindowView: View {
                     }
                     .background(Color(NSColor.windowBackgroundColor))
 
-                    if appState.activePanel != nil {
+                    if showsSidePanel {
                         Divider()
                         sidePanelContent
-                            .frame(width: MacMainWindowLayout.sidePanelWidth(for: geometry.size.width))
+                            .frame(width: sidePanelWidth)
                             .frame(maxHeight: .infinity)
                             .background(Color(NSColor.windowBackgroundColor))
                             .transition(.move(edge: .trailing))
