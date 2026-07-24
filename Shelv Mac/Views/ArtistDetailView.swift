@@ -298,8 +298,7 @@ struct ArtistDetailView: View {
                             .tint(iconOnly ? themeColor : .white)
                             .frame(width: iconOnly ? 18 : nil, height: iconOnly ? 18 : nil)
                     } else {
-                        Label(String(localized: "play"), systemImage: "play.fill")
-                            .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                        MacPlayActionLabel(iconOnly: iconOnly, compact: compact)
                             .frame(minWidth: iconOnly ? nil : 100)
                     }
                 }

@@ -9,6 +9,7 @@ struct SidebarView: View {
     @ObservedObject private var pinStore = PinnedPlaylistStore.shared
     @Binding var selection: SidebarItem?
     @Binding var selectedPlaylist: Playlist?
+    var maximumWidth: CGFloat = MacMainWindowLayout.sidebarMaximumWidth
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
@@ -205,7 +206,11 @@ struct SidebarView: View {
         .padding(.horizontal, 8)
         .padding(.top, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .navigationSplitViewColumnWidth(min: 190, ideal: 235, max: 310)
+        .navigationSplitViewColumnWidth(
+            min: MacMainWindowLayout.sidebarMinimumWidth,
+            ideal: min(MacMainWindowLayout.sidebarPreferredWidth, maximumWidth),
+            max: maximumWidth
+        )
         .task {
             if showFavoritesInLibrary && libraryStore.starredAlbums.isEmpty {
                 await libraryStore.loadStarred()

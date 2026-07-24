@@ -73,8 +73,7 @@ struct PlaylistDetailView: View {
             Button {
                 if !songs.isEmpty { appState.player.play(songs: songs) }
             } label: {
-                Label(String(localized: "play"), systemImage: "play.fill")
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                MacPlayActionLabel(iconOnly: iconOnly, compact: compact)
                     .frame(minWidth: iconOnly ? nil : 110)
             }
             .buttonStyle(.borderedProminent)
