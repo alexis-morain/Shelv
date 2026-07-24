@@ -28,11 +28,4 @@ enum MacMainWindowLayout {
         guard showsSidePanel else { return availableWidth }
         return availableWidth - sidePanelWidth(for: availableWidth) - dividerWidth
     }
-
-    static func sidebarMaximumWidth(for navigationWidth: CGFloat) -> CGFloat {
-        min(
-            sidebarMaximumWidth,
-            max(sidebarMinimumWidth, navigationWidth - contentMinimumWidth)
-        )
-    }
 }
