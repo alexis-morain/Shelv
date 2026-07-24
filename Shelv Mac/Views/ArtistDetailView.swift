@@ -109,8 +109,9 @@ struct ArtistDetailView: View {
                                 Spacer(minLength: 8)
 
                                 ViewThatFits(in: .horizontal) {
-                                    actionButtons(iconOnly: false)
-                                    actionButtons(iconOnly: true)
+                                    actionButtons(iconOnly: false, compact: false)
+                                    actionButtons(iconOnly: true, compact: false)
+                                    actionButtons(iconOnly: true, compact: true)
                                 }
                             }
 
@@ -286,8 +287,8 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func actionButtons(iconOnly: Bool) -> some View {
-        HStack(spacing: 10) {
+    private func actionButtons(iconOnly: Bool, compact: Bool) -> some View {
+        HStack(spacing: compact ? 6 : 10) {
             Button {
                 Task { await vm.playAll(player: appState.player, albums: displayAlbums, shuffle: false) }
             } label: {
@@ -296,6 +297,7 @@ struct ArtistDetailView: View {
                         ProgressView()
                             .controlSize(.small)
                             .tint(iconOnly ? themeColor : .white)
+                            .frame(width: iconOnly ? 18 : nil, height: iconOnly ? 18 : nil)
                     } else {
                         Label(String(localized: "play"), systemImage: "play.fill")
                             .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
@@ -305,7 +307,7 @@ struct ArtistDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(themeColor)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
             Button {
@@ -316,7 +318,7 @@ struct ArtistDetailView: View {
                     .frame(minWidth: iconOnly ? nil : 100)
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
             if showInstantMixActions && !offlineMode.isOffline {
@@ -327,7 +329,7 @@ struct ArtistDetailView: View {
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(compact ? .regular : .large)
                 .disabled(vm.isLoading)
             }
 
@@ -343,7 +345,7 @@ struct ArtistDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
             Button {
@@ -358,11 +360,11 @@ struct ArtistDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
             if enableDownloads, let detail = vm.artist {
-                artistDownloadButtons(for: detail, iconOnly: iconOnly)
+                artistDownloadButtons(for: detail, iconOnly: iconOnly, compact: compact)
             }
 
             if showFavoriteActions, let detail = vm.artist {
@@ -386,6 +388,8 @@ struct ArtistDetailView: View {
                     : String(localized: "add_to_favorites"))
             }
         }
+        .macActionButtonShape(iconOnly: iconOnly)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var artistDownloadStatus: AlbumDownloadStatus {
@@ -410,7 +414,7 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func artistDownloadButtons(for detail: ArtistDetail, iconOnly: Bool) -> some View {
+    private func artistDownloadButtons(for detail: ArtistDetail, iconOnly: Bool, compact: Bool) -> some View {
         let artistModel = Artist(id: detail.id, name: detail.name,
                                  albumCount: detail.albumCount, coverArt: detail.coverArt,
                                  starred: nil)
@@ -424,7 +428,7 @@ struct ArtistDetailView: View {
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(compact ? .regular : .large)
                 .tint(themeColor)
             }
         case .partial:
@@ -436,7 +440,7 @@ struct ArtistDetailView: View {
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(compact ? .regular : .large)
                 .tint(themeColor)
             }
             Button(role: .destructive) {
@@ -450,7 +454,7 @@ struct ArtistDetailView: View {
                 .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(.red)
         case .complete:
             Button(role: .destructive) {
@@ -464,7 +468,7 @@ struct ArtistDetailView: View {
                 .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(.red)
         }
     }

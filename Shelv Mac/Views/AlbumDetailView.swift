@@ -190,8 +190,9 @@ struct AlbumDetailView: View {
                     Spacer(minLength: 12)
 
                     ViewThatFits(in: .horizontal) {
-                        actionButtons(iconOnly: false)
-                        actionButtons(iconOnly: true)
+                        actionButtons(iconOnly: false, compact: false)
+                        actionButtons(iconOnly: true, compact: false)
+                        actionButtons(iconOnly: true, compact: true)
                     }
                 }
 
@@ -206,8 +207,8 @@ struct AlbumDetailView: View {
     }
 
     @ViewBuilder
-    private func actionButtons(iconOnly: Bool) -> some View {
-        HStack(spacing: 10) {
+    private func actionButtons(iconOnly: Bool, compact: Bool) -> some View {
+        HStack(spacing: compact ? 6 : 10) {
             Button {
                 appState.player.play(songs: displaySongs)
             } label: {
@@ -217,7 +218,7 @@ struct AlbumDetailView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(themeColor)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
             Button {
@@ -228,7 +229,7 @@ struct AlbumDetailView: View {
                     .frame(minWidth: iconOnly ? nil : 100)
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
             if showInstantMixActions && !offlineMode.isOffline {
@@ -239,7 +240,7 @@ struct AlbumDetailView: View {
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(compact ? .regular : .large)
                 .disabled(vm.isLoading)
             }
 
@@ -251,7 +252,7 @@ struct AlbumDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
             Button {
@@ -262,11 +263,11 @@ struct AlbumDetailView: View {
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
             if enableDownloads, let album = vm.album {
-                albumDownloadButtons(for: album, iconOnly: iconOnly)
+                albumDownloadButtons(for: album, iconOnly: iconOnly, compact: compact)
             }
 
             if showFavoriteActions && !offlineMode.isOffline, let album = vm.album {
@@ -289,6 +290,8 @@ struct AlbumDetailView: View {
                       : String(localized: "add_to_favorites"))
             }
         }
+        .macActionButtonShape(iconOnly: iconOnly)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
@@ -337,7 +340,7 @@ struct AlbumDetailView: View {
     }
 
     @ViewBuilder
-    private func albumDownloadButtons(for album: AlbumDetail, iconOnly: Bool) -> some View {
+    private func albumDownloadButtons(for album: AlbumDetail, iconOnly: Bool, compact: Bool) -> some View {
         let albumModel = Album(id: album.id, name: album.name, artist: album.artist,
                                artistId: album.artistId, coverArt: album.coverArt,
                                songCount: album.songCount, duration: album.duration,
@@ -354,7 +357,7 @@ struct AlbumDetailView: View {
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(compact ? .regular : .large)
                 .tint(themeColor)
             }
         case .partial(let done, let total):
@@ -366,7 +369,7 @@ struct AlbumDetailView: View {
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
-                .controlSize(.large)
+                .controlSize(compact ? .regular : .large)
                 .tint(themeColor)
             }
             Button(role: .destructive) {
@@ -380,7 +383,7 @@ struct AlbumDetailView: View {
                 .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(.red)
         case .complete:
             Button(role: .destructive) {
@@ -394,7 +397,7 @@ struct AlbumDetailView: View {
                 .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
             .buttonStyle(.bordered)
-            .controlSize(.large)
+            .controlSize(compact ? .regular : .large)
             .tint(.red)
         }
     }
@@ -410,11 +413,23 @@ struct AdaptiveLabelStyle: LabelStyle {
     func makeBody(configuration: Configuration) -> some View {
         if iconOnly {
             configuration.icon
+                .frame(width: 18, height: 18)
         } else {
             HStack(spacing: 4) {
                 configuration.icon
                 configuration.title
             }
+        }
+    }
+}
+
+extension View {
+    @ViewBuilder
+    func macActionButtonShape(iconOnly: Bool) -> some View {
+        if iconOnly {
+            buttonBorderShape(.circle)
+        } else {
+            self
         }
     }
 }

@@ -61,43 +61,54 @@ struct ArtistsView: View {
         }
     }
 
+    @ViewBuilder
+    private func libraryToolbar(showsFilter: Bool) -> some View {
+        HStack {
+            if showsFilter {
+                TextField(String(localized: "filter"), text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 160, idealWidth: 220, maxWidth: 220)
+            }
+            Spacer()
+            Picker("\(String(localized: "sort")):", selection: $vm.artistSortOption) {
+                ForEach(ArtistSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
+                    Text(opt.label).tag(opt)
+                }
+            }
+            .pickerStyle(.menu)
+            .tint(.primary)
+            .frame(width: 180)
+            if vm.artistSortOption != .name {
+                Button {
+                    vm.artistSortDirection = vm.artistSortDirection == .ascending ? .descending : .ascending
+                } label: {
+                    Image(systemName: vm.artistSortDirection == .ascending ? "arrow.up" : "arrow.down")
+                        .font(.title3)
+                }
+                .buttonStyle(.borderless)
+                .help(vm.artistSortDirection == .ascending ? String(localized: "ascending") : String(localized: "descending"))
+            }
+            Button { isGrid.toggle() } label: {
+                Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                    .font(.title3)
+            }
+            .buttonStyle(.borderless)
+            .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+    }
+
     var body: some View {
         let displayArtists = self.displayArtists
         let lastArtistID = displayArtists.last?.id
 
         VStack(spacing: 0) {
-            HStack {
-                TextField(String(localized: "filter"), text: $searchText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 220)
-                Spacer()
-                Picker("\(String(localized: "sort")):", selection: $vm.artistSortOption) {
-                    ForEach(ArtistSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
-                        Text(opt.label).tag(opt)
-                    }
-                }
-                .pickerStyle(.menu)
-                .tint(.primary)
-                .frame(width: 180)
-                if vm.artistSortOption != .name {
-                    Button {
-                        vm.artistSortDirection = vm.artistSortDirection == .ascending ? .descending : .ascending
-                    } label: {
-                        Image(systemName: vm.artistSortDirection == .ascending ? "arrow.up" : "arrow.down")
-                            .font(.title3)
-                    }
-                    .buttonStyle(.borderless)
-                    .help(vm.artistSortDirection == .ascending ? String(localized: "ascending") : String(localized: "descending"))
-                }
-                Button { isGrid.toggle() } label: {
-                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
-                        .font(.title3)
-                }
-                .buttonStyle(.borderless)
-                .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
+            ViewThatFits(in: .horizontal) {
+                libraryToolbar(showsFilter: true)
+                    .frame(minWidth: MacMainWindowLayout.filterFieldVisibilityWidth)
+                libraryToolbar(showsFilter: false)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 10)
             .background(.bar)
 
             Divider()
