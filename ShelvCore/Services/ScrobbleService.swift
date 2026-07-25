@@ -70,7 +70,11 @@ actor ScrobbleService {
 
     /// Meldet nur den aktuell noch laufenden Titel. Fehlversuche werden bewusst
     /// nicht gespeichert, damit nach einem Reconnect kein veraltetes Lied erscheint.
-    func reportNowPlaying(songId: String, serverConfigId: String) async {
+    func reportNowPlaying(
+        songId: String,
+        serverConfigId: String,
+        positionSeconds: Int
+    ) async {
         guard await Self.canContactServer(), !Task.isCancelled else { return }
         guard let target = await Self.resolveServer(
             configId: serverConfigId,
@@ -83,7 +87,8 @@ actor ScrobbleService {
                 songId: songId,
                 submission: false,
                 server: target.server,
-                password: password
+                password: password,
+                positionSeconds: positionSeconds
             )
         } catch is CancellationError {
             return
