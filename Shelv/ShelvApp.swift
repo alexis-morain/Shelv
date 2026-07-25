@@ -261,6 +261,15 @@ struct ShelvApp: App {
                         async let starred: Void = LibraryStore.shared.loadStarred()
                         async let discover: Bool = LibraryStore.shared.loadDiscover()
                         _ = await (artists, starred, discover)
+                        guard !Task.isCancelled,
+                              serverStore.activeServer?.id == serverID
+                        else { return }
+                        // CarPlay-Templates beobachten die SwiftUI-Auswahl nicht direkt.
+                        // Erst signalisieren, wenn alle Arrays zur neuen Library gehören.
+                        NotificationCenter.default.post(
+                            name: .carPlayMusicLibrarySelectionReloaded,
+                            object: serverID
+                        )
                     }
                 }
         }

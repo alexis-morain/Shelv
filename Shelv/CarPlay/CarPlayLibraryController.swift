@@ -49,6 +49,18 @@ final class CarPlayLibraryController {
             .sink { [weak self] _ in self?.buildMenu() }
             .store(in: &cancellables)
 
+        NotificationCenter.default
+            .publisher(for: .carPlayMusicLibrarySelectionReloaded)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      let serverID = notification.object as? UUID,
+                      ServerStore.shared.activeServer?.id == serverID
+                else { return }
+                refreshForMusicLibrarySelection()
+            }
+            .store(in: &cancellables)
+
         // UserDefaults.didChangeNotification feuert bei jeder Mutation (Player-State-Saves
         // alle paar Sekunden) — nur bei tatsächlicher Änderung des relevanten Keys reagieren.
         NotificationCenter.default
@@ -155,7 +167,11 @@ final class CarPlayLibraryController {
         Task { @MainActor [weak self] in
             guard let self, let t = self.albumsTemplate else { return }
             let current = self.albumSource()
-            guard !current.isEmpty else { return }
+            guard !current.isEmpty else {
+                self.albumCoverTask?.cancel()
+                t.updateSections(self.emptyLibrarySections())
+                return
+            }
             let built = self.makeAlbumSections(current)
             self.applyAlbumSections(built, to: t)
         }
@@ -165,7 +181,11 @@ final class CarPlayLibraryController {
         Task { @MainActor [weak self] in
             guard let self, let t = self.artistsTemplate else { return }
             let current = self.artistSource()
-            guard !current.isEmpty else { return }
+            guard !current.isEmpty else {
+                self.artistCoverTask?.cancel()
+                t.updateSections(self.emptyLibrarySections())
+                return
+            }
             let counts = self.albumCountByArtist()
             let built = self.makeArtistSections(current, counts: counts)
             self.applyArtistSections(built, to: t)
@@ -187,6 +207,23 @@ final class CarPlayLibraryController {
                 await streamCovers(into: built.itemsByCoverId, orderedCoverArtIds: built.orderedCoverArtIds)
             }
         }
+    }
+
+    private func refreshForMusicLibrarySelection() {
+        buildMenu()
+        rebuildAlbumsTemplate()
+        rebuildArtistsTemplate()
+        rebuildFavoritesTemplate()
+    }
+
+    private func emptyLibrarySections() -> [CPListSection] {
+        let item = CPListItem(
+            text: String(localized: "no_data_available_yet"),
+            detailText: nil
+        )
+        return [
+            CPListSection(items: [item], header: nil, sectionIndexTitle: nil)
+        ]
     }
 
     private func pushAlbumsList() {

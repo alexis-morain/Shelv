@@ -50,6 +50,18 @@ final class CarPlayDiscoverController {
             .sink { [weak self] _ in self?.reload() }
             .store(in: &cancellables)
 
+        NotificationCenter.default
+            .publisher(for: .carPlayMusicLibrarySelectionReloaded)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let self,
+                      let serverID = notification.object as? UUID,
+                      serverStore.activeServer?.id == serverID
+                else { return }
+                refreshForMusicLibrarySelection()
+            }
+            .store(in: &cancellables)
+
         // Downloads werden in CarPlay asynchron nach load() geladen.
         // Sobald songs sich ändert, Offline-State neu rendern damit die Mix-Buttons erscheinen.
         DownloadStore.shared.$songs
@@ -113,6 +125,21 @@ final class CarPlayDiscoverController {
         }
         showLoading()
         loadTask = Task { await fetchAndBuild(generation: generation) }
+    }
+
+    private func refreshForMusicLibrarySelection() {
+        loadTask?.cancel()
+        _ = nextLoadGeneration()
+        guard !OfflineModeService.shared.isOffline else {
+            showOffline()
+            return
+        }
+        guard !discoverContentIsEmpty else {
+            reload()
+            return
+        }
+        rootTemplate.updateSections(buildSections())
+        startCoverEnrichment()
     }
 
     private func showOffline() {

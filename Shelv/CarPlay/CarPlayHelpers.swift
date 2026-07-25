@@ -9,6 +9,9 @@ typealias CPItemHandler = (any CPSelectableListItem, @escaping () -> Void) -> Vo
 
 extension Notification.Name {
     static let carPlayStarredChanged = Notification.Name("shelv.carPlayStarredChanged")
+    static let carPlayMusicLibrarySelectionReloaded = Notification.Name(
+        "shelv.carPlayMusicLibrarySelectionReloaded"
+    )
 }
 
 // MARK: - Accent Color
