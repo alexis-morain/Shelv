@@ -298,7 +298,7 @@ struct ArtistDetailView: View {
                             .tint(iconOnly ? themeColor : .white)
                             .frame(width: iconOnly ? 18 : nil, height: iconOnly ? 18 : nil)
                     } else {
-                        MacPlayActionLabel(iconOnly: iconOnly, compact: compact)
+                        MacPlayActionLabel(iconOnly: iconOnly)
                             .frame(minWidth: iconOnly ? nil : 100)
                     }
                 }
@@ -386,7 +386,7 @@ struct ArtistDetailView: View {
                     : String(localized: "add_to_favorites"))
             }
         }
-        .macActionButtonShape(iconOnly: iconOnly)
+        .macActionButtonShape(compact: compact)
         .fixedSize(horizontal: true, vertical: false)
     }
 

@@ -73,7 +73,7 @@ struct PlaylistDetailView: View {
             Button {
                 if !songs.isEmpty { appState.player.play(songs: songs) }
             } label: {
-                MacPlayActionLabel(iconOnly: iconOnly, compact: compact)
+                MacPlayActionLabel(iconOnly: iconOnly)
                     .frame(minWidth: iconOnly ? nil : 110)
             }
             .buttonStyle(.borderedProminent)
@@ -118,7 +118,7 @@ struct PlaylistDetailView: View {
                 playlistDownloadButtons(iconOnly: iconOnly, compact: compact)
             }
         }
-        .macActionButtonShape(iconOnly: iconOnly)
+        .macActionButtonShape(compact: compact)
         .fixedSize(horizontal: true, vertical: false)
     }
     @Environment(\.themeColor) private var themeColor
