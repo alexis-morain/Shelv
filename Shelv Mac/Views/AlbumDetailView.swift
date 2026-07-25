@@ -212,7 +212,7 @@ struct AlbumDetailView: View {
             Button {
                 appState.player.play(songs: displaySongs)
             } label: {
-                MacPlayActionLabel(iconOnly: iconOnly, compact: compact)
+                MacPlayActionLabel(iconOnly: iconOnly)
                     .frame(minWidth: iconOnly ? nil : 110)
             }
             .buttonStyle(.borderedProminent)
@@ -289,7 +289,7 @@ struct AlbumDetailView: View {
                       : String(localized: "add_to_favorites"))
             }
         }
-        .macActionButtonShape(iconOnly: iconOnly)
+        .macActionButtonShape(compact: compact)
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -424,14 +424,11 @@ struct AdaptiveLabelStyle: LabelStyle {
 
 struct MacPlayActionLabel: View {
     let iconOnly: Bool
-    let compact: Bool
 
     var body: some View {
         if iconOnly {
             Image(systemName: "play.fill")
-                .font(.system(size: compact ? 15 : 17, weight: .semibold))
                 .frame(width: 18, height: 18)
-                .offset(x: 0.75)
                 .accessibilityLabel(Text(String(localized: "play")))
         } else {
             Label(String(localized: "play"), systemImage: "play.fill")
@@ -442,11 +439,11 @@ struct MacPlayActionLabel: View {
 
 extension View {
     @ViewBuilder
-    func macActionButtonShape(iconOnly: Bool) -> some View {
-        if iconOnly {
+    func macActionButtonShape(compact: Bool) -> some View {
+        if compact {
             buttonBorderShape(.circle)
         } else {
-            self
+            buttonBorderShape(.capsule)
         }
     }
 }
