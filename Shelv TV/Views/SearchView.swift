@@ -81,10 +81,15 @@ struct SearchView: View {
                             .focusSection()
                         }
                     } else {
-                        if let artists = result?.artist, !artists.isEmpty {
+                        if let artists = result?.artist.map({
+                            $0.filter { ($0.albumCount ?? 0) > 0 }
+                        }), !artists.isEmpty {
                             sectionHeader(String(localized: "artists"))
                             ForEach(artists) { artist in
-                                ArtistListRow(artist: artist, albumCount: 0) {
+                                ArtistListRow(
+                                    artist: artist,
+                                    albumCount: artist.albumCount ?? 0
+                                ) {
                                     commitCurrentSearch()
                                     path.append(artist)
                                 }
