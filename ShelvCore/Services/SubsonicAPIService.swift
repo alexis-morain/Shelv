@@ -1600,7 +1600,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func scrobble(songId: String, submission: Bool = true, playedAt: Double? = nil) async throws {
+    func scrobble(
+        songId: String,
+        submission: Bool = true,
+        playedAt: Double? = nil,
+        positionSeconds: Int? = nil
+    ) async throws {
         #if DEBUG
         if isDemoActive { return }
         #endif
@@ -1610,7 +1615,8 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             extra: scrobbleQueryItems(
                 songId: songId,
                 submission: submission,
-                playedAt: playedAt
+                playedAt: playedAt,
+                positionSeconds: positionSeconds
             )
         ).response
         try check(status: body.status, error: body.error)
@@ -1624,7 +1630,8 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         submission: Bool = true,
         playedAt: Double? = nil,
         server: SubsonicServer,
-        password: String
+        password: String,
+        positionSeconds: Int? = nil
     ) async throws {
         #if DEBUG
         if server.baseURL == DemoContent.serverBaseURL || server.activeBaseURL == DemoContent.serverBaseURL {
@@ -1636,7 +1643,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             for: server,
             password: password,
             path: "scrobble",
-            extra: scrobbleQueryItems(songId: songId, submission: submission, playedAt: playedAt)
+            extra: scrobbleQueryItems(
+                songId: songId,
+                submission: submission,
+                playedAt: playedAt,
+                positionSeconds: positionSeconds
+            )
         ).response
         try check(status: body.status, error: body.error)
     }
@@ -1644,17 +1656,26 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     private func scrobbleQueryItems(
         songId: String,
         submission: Bool,
-        playedAt: Double?
+        playedAt: Double?,
+        positionSeconds: Int?
     ) -> [URLQueryItem] {
-        var extra = [
+        var items = [
             URLQueryItem(name: "id", value: songId),
             URLQueryItem(name: "submission", value: submission ? "true" : "false")
         ]
-        if let ts = playedAt {
-            // Subsonic erwartet Millisekunden seit Epoch
-            extra.append(URLQueryItem(name: "time", value: String(Int64(ts * 1000))))
+        if let playedAt {
+            // Subsonic erwartet Millisekunden seit Epoch.
+            items.append(
+                URLQueryItem(name: "time", value: String(Int64(playedAt * 1000)))
+            )
         }
-        return extra
+        if !submission, let positionSeconds {
+            // Navidrome akzeptiert die laufende Position bei Now-Playing in Sekunden.
+            items.append(
+                URLQueryItem(name: "position", value: String(max(0, positionSeconds)))
+            )
+        }
+        return items
     }
 
     /// Speichert die Wiedergabe-Queue serverseitig (`savePlayQueue`).

@@ -1819,6 +1819,7 @@ class AudioPlayerService: ObservableObject {
             navidromeNowPlayingTask = nil
             return
         }
+        let positionSeconds = Self.navidromePositionSeconds(from: currentTime)
 
         navidromeNowPlayingTask = Task { @MainActor [weak self] in
             guard let self,
@@ -1830,9 +1831,16 @@ class AudioPlayerService: ObservableObject {
             else { return }
             await ScrobbleService.shared.reportNowPlaying(
                 songId: song.id,
-                serverConfigId: serverConfigId
+                serverConfigId: serverConfigId,
+                positionSeconds: positionSeconds
             )
         }
+    }
+
+    private static func navidromePositionSeconds(from elapsedTime: Double) -> Int {
+        guard elapsedTime.isFinite else { return 0 }
+        let clamped = min(max(0, elapsedTime), Double(Int32.max))
+        return Int(clamped.rounded(.down))
     }
 
     private func clearPlaybackState() {

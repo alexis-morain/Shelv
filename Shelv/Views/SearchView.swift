@@ -166,6 +166,20 @@ struct SearchView: View {
         automaticallyRecordedQuery = nil
     }
 
+    private func artistDestination(_ artist: Artist) -> some View {
+        ArtistDetailView(artist: artist)
+            .onAppear {
+                commitCurrentSearch()
+            }
+    }
+
+    private func albumDestination(_ album: Album) -> some View {
+        AlbumDetailView(album: album)
+            .onAppear {
+                commitCurrentSearch()
+            }
+    }
+
     private func recordCompletedSearch(_ query: String) {
         let update = SearchHistoryStore.recordAutomatically(
             query,
@@ -265,7 +279,7 @@ struct SearchView: View {
                             Section(String(localized: "artists")) {
                                 ForEach(artists) { artist in
                                     ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
-                                        NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                        NavigationLink(destination: artistDestination(artist)) {
                                             HStack(spacing: 12) {
                                                 AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
                                                     .frame(width: 44, height: 44)
@@ -280,9 +294,6 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
-                                        .simultaneousGesture(
-                                            TapGesture().onEnded { commitCurrentSearch() }
-                                        )
                                         .contextMenu {
                                             artistContextMenuItems(artist)
                                         }
@@ -320,7 +331,7 @@ struct SearchView: View {
                                         totalSongs: album.songCount ?? 0,
                                         tracksIntermediateProgress: false
                                     ) { downloadStatus in
-                                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                                        NavigationLink(destination: albumDestination(album)) {
                                             HStack(spacing: 12) {
                                                 AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
                                                     .frame(width: 44, height: 44)
@@ -339,9 +350,6 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
-                                        .simultaneousGesture(
-                                            TapGesture().onEnded { commitCurrentSearch() }
-                                        )
                                         .albumContextMenu(album, showPreview: false)
                                         .personalizedAlbumArtistSwipeActions(
                                             isOffline: offlineMode.isOffline,
@@ -532,7 +540,7 @@ struct SearchView: View {
                             Section(String(localized: "favorites")) {
                                 ForEach(matchedFavoriteArtists) { artist in
                                     ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
-                                        NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                        NavigationLink(destination: artistDestination(artist)) {
                                             HStack(spacing: 12) {
                                                 AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
                                                     .frame(width: 44, height: 44)
@@ -546,9 +554,6 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
-                                        .simultaneousGesture(
-                                            TapGesture().onEnded { commitCurrentSearch() }
-                                        )
                                         .contextMenu {
                                             artistContextMenuItems(artist)
                                         }
@@ -581,7 +586,7 @@ struct SearchView: View {
                                         totalSongs: album.songCount ?? 0,
                                         tracksIntermediateProgress: false
                                     ) { downloadStatus in
-                                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                                        NavigationLink(destination: albumDestination(album)) {
                                             HStack(spacing: 12) {
                                                 AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
                                                     .frame(width: 44, height: 44)
@@ -598,9 +603,6 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
-                                        .simultaneousGesture(
-                                            TapGesture().onEnded { commitCurrentSearch() }
-                                        )
                                         .albumContextMenu(album, showPreview: false)
                                         .personalizedAlbumArtistSwipeActions(
                                             isOffline: offlineMode.isOffline,
