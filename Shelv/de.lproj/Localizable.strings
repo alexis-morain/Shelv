@@ -610,8 +610,8 @@
 "Shuffle" = "Mischen";
 "Play or shuffle?" = "Abspielen oder mischen?";
 "shortcut_order_type" = "Wiedergabe";
-"shortcut_order_in_order" = "Abspielen";
-"shortcut_order_shuffled" = "Mischen";
+"shortcut_order_in_order" = "Der Reihe nach";
+"shortcut_order_shuffled" = "Gemischt";
 "shortcut_order_parameter" = "Reihenfolge";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Neueste";
@@ -728,3 +728,8 @@
 "siri_shortcuts_carplay_step_4" = "„Sofort ausführen“ wählen und Mitteilungen deaktivieren, falls angeboten.";
 "siri_shortcuts_carplay_footer" = "Persönliche Automationen werden auf diesem iPhone gespeichert und müssen einmal von dir erstellt werden. Shelv kann sie nicht automatisch anlegen.";
 "credential_storage_failed" = "Der sichere Vorgang mit den Zugangsdaten konnte nicht abgeschlossen werden. Bitte versuche es erneut.";
+"shortcut_playback_attributes_parameter" = "Wiedergabe";
+"shortcut_queue_location_parameter" = "Wiedergabeposition";
+"shortcut_play_choice_play" = "Abspielen";
+"shortcut_play_choice_shuffle" = "Mischen";
+"shortcut_play_or_shuffle_dialog" = "Abspielen oder mischen?";

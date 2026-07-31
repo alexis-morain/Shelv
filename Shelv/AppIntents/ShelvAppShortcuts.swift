@@ -135,13 +135,10 @@ struct ShelvPlayPlaylistIntent: AppIntent, AudioPlaybackIntent {
     @Parameter(title: "shortcut_playlist_parameter")
     var playlist: ShelvPlaylistEntity
 
-    @Dependency private var playback: ShortcutPlaybackCoordinator
+    @Parameter(title: "shortcut_play_text_mode_parameter")
+    var order: ShelvTextPlaybackChoice?
 
-    static var parameterSummary: some ParameterSummary {
-        Summary("shortcut_play_playlist_summary") {
-            \.$playlist
-        }
-    }
+    @Dependency private var playback: ShortcutPlaybackCoordinator
 
     func perform() async throws -> some IntentResult {
         guard let server = await MainActor.run(body: { ServerStore.shared.activeServer }) else {
@@ -152,41 +149,19 @@ struct ShelvPlayPlaylistIntent: AppIntent, AudioPlaybackIntent {
             kind: .playlist,
             contentID: playlist.id
         )
-        try await playback.execute(.playable(reference, order: .inOrder))
-        return .result()
-    }
-}
 
-struct ShelvShufflePlaylistIntent: AppIntent, AudioPlaybackIntent {
-    static let title: LocalizedStringResource = "shortcut_shuffle_playlist_title"
-    static let description = IntentDescription("shortcut_shuffle_playlist_description")
-    static let openAppWhenRun = false
-    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-
-    @available(iOS 26.0, *)
-    static let supportedModes: IntentModes = .background
-
-    @Parameter(title: "shortcut_playlist_parameter")
-    var playlist: ShelvPlaylistEntity
-
-    @Dependency private var playback: ShortcutPlaybackCoordinator
-
-    static var parameterSummary: some ParameterSummary {
-        Summary("shortcut_shuffle_playlist_summary") {
-            \.$playlist
+        let resolvedOrder: ShortcutPlaybackOrder
+        if let order {
+            resolvedOrder = order.playbackOrder
+        } else {
+            let choice = try await $order.requestDisambiguation(
+                among: [.play, .shuffle],
+                dialog: "shortcut_play_or_shuffle_dialog"
+            )
+            resolvedOrder = choice.playbackOrder
         }
-    }
 
-    func perform() async throws -> some IntentResult {
-        guard let server = await MainActor.run(body: { ServerStore.shared.activeServer }) else {
-            throw ShortcutPlaybackError.noActiveServer
-        }
-        let reference = ShortcutPlayableReference(
-            serverConfigID: server.id.uuidString,
-            kind: .playlist,
-            contentID: playlist.id
-        )
-        try await playback.execute(.playable(reference, order: .shuffled))
+        try await playback.execute(.playable(reference, order: resolvedOrder))
         return .result()
     }
 }

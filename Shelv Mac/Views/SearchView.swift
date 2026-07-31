@@ -24,12 +24,59 @@ struct SearchView: View {
         personalizationVisibility.showPlaylistActions
     }
 
+    private var showFavoritesInLibrary: Bool {
+        personalizationVisibility.showFavoritesInLibrary
+    }
+
     private var trimmedQuery: String {
         vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var matchedFavoriteArtists: [Artist] {
+        guard showFavoritesInLibrary, !trimmedQuery.isEmpty else { return [] }
+        let q = trimmedQuery.lowercased()
+        var base = libraryStore.starredArtists
+        if OfflineModeService.shared.isOffline {
+            let downloadedNames = Set(DownloadStore.shared.songs.compactMap { $0.artistName })
+            base = base.filter { downloadedNames.contains($0.name) }
+        }
+        return base.filter { $0.name.lowercased().contains(q) }
+    }
+
+    private var matchedFavoriteAlbums: [Album] {
+        guard showFavoritesInLibrary, !trimmedQuery.isEmpty else { return [] }
+        let q = trimmedQuery.lowercased()
+        var base = libraryStore.starredAlbums
+        if OfflineModeService.shared.isOffline {
+            let downloadedAlbumIds = Set(DownloadStore.shared.songs.compactMap { $0.albumId })
+            base = base.filter { downloadedAlbumIds.contains($0.id) }
+        }
+        return base.filter {
+            $0.name.lowercased().contains(q) || ($0.artist?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private var matchedFavoriteSongs: [Song] {
+        guard showFavoritesInLibrary, !trimmedQuery.isEmpty else { return [] }
+        let q = trimmedQuery.lowercased()
+        var base = libraryStore.starredSongs
+        if OfflineModeService.shared.isOffline {
+            let downloadedSongIds = Set(DownloadStore.shared.songs.map { $0.songId })
+            base = base.filter { downloadedSongIds.contains($0.id) }
+        }
+        return base.filter {
+            $0.title.lowercased().contains(q) ||
+            ($0.artist?.lowercased().contains(q) ?? false) ||
+            ($0.album?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private var hasFavoriteResults: Bool {
+        !matchedFavoriteArtists.isEmpty || !matchedFavoriteAlbums.isEmpty || !matchedFavoriteSongs.isEmpty
+    }
+
     private var shouldShowSearchProgress: Bool {
-        vm.isLoading || (vm.isEmpty && lyricsResults.isEmpty && isLyricsSearching)
+        vm.isLoading || (vm.isEmpty && lyricsResults.isEmpty && !hasFavoriteResults && isLyricsSearching)
     }
 
     var body: some View {
@@ -64,10 +111,10 @@ struct SearchView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if trimmedQuery.isEmpty && !recentSearches.isEmpty {
                 searchHistoryView
-            } else if vm.isEmpty && lyricsResults.isEmpty && !trimmedQuery.isEmpty {
+            } else if vm.isEmpty && lyricsResults.isEmpty && !hasFavoriteResults && !trimmedQuery.isEmpty {
                 ContentUnavailableView.search(text: vm.query)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if vm.isEmpty && lyricsResults.isEmpty {
+            } else if vm.isEmpty && lyricsResults.isEmpty && !hasFavoriteResults {
                 VStack(spacing: 12) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 48))
@@ -79,6 +126,32 @@ struct SearchView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 28) {
+                        if !vm.songs.isEmpty {
+                            SearchSection(title: String(localized: "tracks")) {
+                                ForEach(vm.songs) { song in
+                                    SearchSongRow(
+                                        song: song,
+                                        showFavorite: showFavoriteActions,
+                                        showPlaylist: showPlaylistActions,
+                                        isStarred: libraryStore.isSongStarred(song)
+                                    ) {
+                                        commitCurrentSearch()
+                                        let idx = vm.songs.firstIndex(where: { $0.id == song.id }) ?? 0
+                                        appState.player.play(songs: vm.songs, startIndex: idx)
+                                    } onPlayNext: {
+                                        appState.player.addPlayNext(song)
+                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+                                    } onAddToQueue: {
+                                        appState.player.addToQueue(song)
+                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+                                    } onFavorite: {
+                                        Task { await libraryStore.toggleStarSong(song) }
+                                    } onAddToPlaylist: {
+                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                    }
+                                }
+                            }
+                        }
                         if !vm.artists.isEmpty {
                             SearchSection(title: String(localized: "artists")) {
                                 ForEach(vm.artists) { artist in
@@ -108,32 +181,6 @@ struct SearchView: View {
                                     .buttonStyle(.plain)
                                     .albumContextMenu(album)
                                     .environmentObject(libraryStore)
-                                }
-                            }
-                        }
-                        if !vm.songs.isEmpty {
-                            SearchSection(title: String(localized: "tracks")) {
-                                ForEach(vm.songs) { song in
-                                    SearchSongRow(
-                                        song: song,
-                                        showFavorite: showFavoriteActions,
-                                        showPlaylist: showPlaylistActions,
-                                        isStarred: libraryStore.isSongStarred(song)
-                                    ) {
-                                        commitCurrentSearch()
-                                        let idx = vm.songs.firstIndex(where: { $0.id == song.id }) ?? 0
-                                        appState.player.play(songs: vm.songs, startIndex: idx)
-                                    } onPlayNext: {
-                                        appState.player.addPlayNext(song)
-                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
-                                    } onAddToQueue: {
-                                        appState.player.addToQueue(song)
-                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
-                                    } onFavorite: {
-                                        Task { await libraryStore.toggleStarSong(song) }
-                                    } onAddToPlaylist: {
-                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
-                                    }
                                 }
                             }
                         }
@@ -176,6 +223,56 @@ struct SearchView: View {
                                             NotificationCenter.default.post(name: .addSongsToPlaylist, object: [item.songId])
                                         }
                                     )
+                                }
+                            }
+                        }
+                        if hasFavoriteResults {
+                            SearchSection(title: String(localized: "favorites")) {
+                                ForEach(matchedFavoriteSongs) { song in
+                                    SearchSongRow(
+                                        song: song,
+                                        showFavorite: showFavoriteActions,
+                                        showPlaylist: showPlaylistActions,
+                                        isStarred: true
+                                    ) {
+                                        commitCurrentSearch()
+                                        let idx = matchedFavoriteSongs.firstIndex(where: { $0.id == song.id }) ?? 0
+                                        appState.player.play(songs: matchedFavoriteSongs, startIndex: idx)
+                                    } onPlayNext: {
+                                        appState.player.addPlayNext(song)
+                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+                                    } onAddToQueue: {
+                                        appState.player.addToQueue(song)
+                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+                                    } onFavorite: {
+                                        Task { await libraryStore.toggleStarSong(song) }
+                                    } onAddToPlaylist: {
+                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                    }
+                                }
+                                ForEach(matchedFavoriteArtists) { artist in
+                                    NavigationLink(value: artist) {
+                                        SearchArtistRow(
+                                            artist: artist,
+                                            showsDownloadBadge: enableDownloads
+                                        )
+                                    }
+                                    .simultaneousGesture(
+                                        TapGesture().onEnded { commitCurrentSearch() }
+                                    )
+                                    .buttonStyle(.plain)
+                                    .artistContextMenu(artist)
+                                }
+                                ForEach(matchedFavoriteAlbums) { album in
+                                    NavigationLink(value: album) {
+                                        SearchAlbumRow(album: album)
+                                    }
+                                    .simultaneousGesture(
+                                        TapGesture().onEnded { commitCurrentSearch() }
+                                    )
+                                    .buttonStyle(.plain)
+                                    .albumContextMenu(album)
+                                    .environmentObject(libraryStore)
                                 }
                             }
                         }

@@ -626,8 +626,8 @@
 "Shuffle" = "Shuffle";
 "Play or shuffle?" = "Play or shuffle?";
 "shortcut_order_type" = "Playback";
-"shortcut_order_in_order" = "Play";
-"shortcut_order_shuffled" = "Shuffle";
+"shortcut_order_in_order" = "In Order";
+"shortcut_order_shuffled" = "Shuffled";
 "shortcut_order_parameter" = "Order";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Newest";
@@ -730,3 +730,8 @@
 "shortcut_media_playback_started" = "Playback started in Shelv.";
 "credential_storage_failed" = "The secure credential operation could not be completed. Please try again.";
 "server_no_longer_available" = "The server is no longer available.";
+"shortcut_playback_attributes_parameter" = "Playback";
+"shortcut_queue_location_parameter" = "Queue Position";
+"shortcut_play_choice_play" = "Play";
+"shortcut_play_choice_shuffle" = "Shuffle";
+"shortcut_play_or_shuffle_dialog" = "Play or shuffle?";

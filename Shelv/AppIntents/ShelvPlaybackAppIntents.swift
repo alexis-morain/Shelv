@@ -65,43 +65,6 @@ private extension ShortcutPlayableKind {
     }
 }
 
-/// A shuffle source can be any catalog item except a live radio station.
-/// Keeping radio out of the entity query prevents Siri from offering a
-/// semantically impossible "shuffle this station" action.
-struct ShelvShuffleSourceEntity: AppEntity, Identifiable, Hashable, Sendable {
-    let playable: ShelvPlayableEntity
-
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "shortcut_shuffle_source_type"
-    static let defaultQuery = ShelvShuffleSourceQuery()
-
-    var id: String { playable.id }
-    var displayRepresentation: DisplayRepresentation { playable.displayRepresentation }
-    var reference: ShortcutPlayableReference { playable.reference }
-}
-
-struct ShelvShuffleSourceQuery: EntityStringQuery {
-    private let playableQuery = ShelvPlayableQuery(
-        allowedKinds: [.song, .album, .artist, .playlist]
-    )
-
-    func entities(for identifiers: [ShelvShuffleSourceEntity.ID]) async throws -> [ShelvShuffleSourceEntity] {
-        try await playableQuery.entities(for: identifiers).compactMap(Self.wrap)
-    }
-
-    func suggestedEntities() async throws -> [ShelvShuffleSourceEntity] {
-        try await playableQuery.suggestedEntities().compactMap(Self.wrap)
-    }
-
-    func entities(matching string: String) async throws -> [ShelvShuffleSourceEntity] {
-        try await playableQuery.entities(matching: string).compactMap(Self.wrap)
-    }
-
-    private static func wrap(_ playable: ShelvPlayableEntity) -> ShelvShuffleSourceEntity? {
-        guard playable.kind != .radio else { return nil }
-        return ShelvShuffleSourceEntity(playable: playable)
-    }
-}
-
 struct ShelvPlayableQuery: EntityStringQuery {
     private let allowedKinds: Set<ShortcutPlayableKind>
 
@@ -236,20 +199,29 @@ struct ShelvPlayPlayableIntent: ShelvBackgroundPlaybackIntent {
     @Parameter(title: "shortcut_playable_parameter")
     var playable: ShelvPlayableEntity
 
-    @Parameter(title: "shortcut_order_parameter", default: .inOrder)
-    var order: ShortcutPlaybackOrder
+    @Parameter(title: "shortcut_play_text_mode_parameter")
+    var order: ShelvTextPlaybackChoice?
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
-    static var parameterSummary: some ParameterSummary {
-        Summary("shortcut_play_summary") {
-            \.$playable
-            \.$order
-        }
-    }
-
     func perform() async throws -> some IntentResult {
-        try await playback.execute(.playable(playable.reference, order: order))
+        let resolvedOrder: ShortcutPlaybackOrder
+        switch playable.kind {
+        case .song, .radio:
+            resolvedOrder = .inOrder
+        case .album, .artist, .playlist:
+            if let order {
+                resolvedOrder = order.playbackOrder
+            } else {
+                let choice = try await $order.requestDisambiguation(
+                    among: [.play, .shuffle],
+                    dialog: "shortcut_play_or_shuffle_dialog"
+                )
+                resolvedOrder = choice.playbackOrder
+            }
+        }
+
+        try await playback.execute(.playable(playable.reference, order: resolvedOrder))
         return .result()
     }
 }
@@ -301,34 +273,13 @@ struct ShelvPlayFromTextIntent: ShelvBackgroundPlaybackIntent {
             } else {
                 let choice = try await $order.requestDisambiguation(
                     among: [.play, .shuffle],
-                    dialog: "Play or shuffle?"
+                    dialog: "shortcut_play_or_shuffle_dialog"
                 )
                 resolvedOrder = choice.playbackOrder
             }
         }
 
         try await playback.execute(.playable(match.reference, order: resolvedOrder))
-        return .result()
-    }
-}
-
-struct ShelvShufflePlayableIntent: ShelvBackgroundPlaybackIntent {
-    static let title: LocalizedStringResource = "shortcut_shuffle_playable_title"
-    static let description = IntentDescription("shortcut_shuffle_playable_description")
-
-    @Parameter(title: "shortcut_playable_parameter")
-    var playable: ShelvShuffleSourceEntity
-
-    @Dependency private var playback: ShortcutPlaybackCoordinator
-
-    static var parameterSummary: some ParameterSummary {
-        Summary("shortcut_shuffle_playable_summary") {
-            \.$playable
-        }
-    }
-
-    func perform() async throws -> some IntentResult {
-        try await playback.execute(.playable(playable.reference, order: .shuffled))
         return .result()
     }
 }

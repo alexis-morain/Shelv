@@ -142,13 +142,6 @@
 			);
 			target = BC5A00102FFF000000000001 /* Shelv TV Siri Extension */;
 		};
-		BC5A00182FFF000000000001 /* Exceptions for "Shelv TV" folder in "Shelv TV" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				AppShortcuts.xcstrings,
-			);
-			target = BC5116102FDC8A690011CDE9 /* Shelv TV */;
-		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -164,9 +157,6 @@
 		};
 		BC5116122FDC8A690011CDE9 /* Shelv TV */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				BC5A00182FFF000000000001 /* Exceptions for "Shelv TV" folder in "Shelv TV" target */,
-			);
 			path = "Shelv TV";
 			sourceTree = "<group>";
 		};

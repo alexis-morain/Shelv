@@ -4,6 +4,8 @@ import UIKit
 struct SearchView: View {
     @EnvironmentObject private var serverStore: ServerStore
     @ObservedObject private var musicLibraries = MusicLibraryStore.shared
+    @ObservedObject private var libraryStore = LibraryStore.shared
+    @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
     @State private var query = ""
     @State private var result: SearchResult?
     @State private var searchTask: Task<Void, Never>?
@@ -20,105 +22,181 @@ struct SearchView: View {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var matchedFavoriteArtists: [Artist] {
+        guard showFavoritesInLibrary, !trimmedQuery.isEmpty else { return [] }
+        let q = trimmedQuery.lowercased()
+        return libraryStore.favoriteArtists.filter { $0.name.lowercased().contains(q) }
+    }
+
+    private var matchedFavoriteAlbums: [Album] {
+        guard showFavoritesInLibrary, !trimmedQuery.isEmpty else { return [] }
+        let q = trimmedQuery.lowercased()
+        return libraryStore.favoriteAlbums.filter {
+            $0.name.lowercased().contains(q) || ($0.artist?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private var matchedFavoriteSongs: [Song] {
+        guard showFavoritesInLibrary, !trimmedQuery.isEmpty else { return [] }
+        let q = trimmedQuery.lowercased()
+        return libraryStore.favoriteSongs.filter {
+            $0.title.lowercased().contains(q) ||
+            ($0.artist?.lowercased().contains(q) ?? false) ||
+            ($0.album?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private var hasFavoriteResults: Bool {
+        !matchedFavoriteArtists.isEmpty || !matchedFavoriteAlbums.isEmpty || !matchedFavoriteSongs.isEmpty
+    }
+
+    private var hasResults: Bool {
+        !(result?.song ?? []).isEmpty ||
+        !(result?.album ?? []).isEmpty ||
+        !(result?.artist ?? []).isEmpty ||
+        hasFavoriteResults
+    }
+
     var body: some View {
         // Bewusst EINE durchgehende vertikale Liste (Künstler → Alben → Titel als Zeilen):
         // verschachtelte horizontale Karussells in einem vertikalen ScrollView sind unter
         // `.searchable` auf tvOS eine Fokus-Falle (der Abwärts-Swipe kommt nicht heraus).
         NavigationStack(path: $path) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    if trimmedQuery.isEmpty {
-                        if !recentSearches.isEmpty {
-                            sectionHeader(
-                                String(localized: "recent_searches"),
-                                topPadding: 0
-                            )
-                            ForEach(recentSearches, id: \.self) { entry in
-                                HStack(spacing: 4) {
-                                    Image(systemName: "clock.arrow.circlepath")
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 48)
-                                    Text(entry)
-                                        .lineLimit(1)
-                                    Spacer(minLength: 0)
-                                }
-                                .rowButton(contentHorizontalPadding: 8) {
-                                    selectSearchHistoryEntry(entry)
-                                }
-                            }
-
-                            HStack {
-                                Button(role: .destructive) {
-                                    clearSearchHistory()
-                                } label: {
-                                    Label(
-                                        String(localized: "clear_search_history"),
-                                        systemImage: "trash"
-                                    )
-                                    .foregroundStyle(.red)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 8)
-                                    .background {
-                                        Capsule()
-                                            .fill(
-                                                isClearSearchHistoryFocused
-                                                    ? Color.red.opacity(0.18)
-                                                    : Color.clear
-                                            )
+            Group {
+                if trimmedQuery.isEmpty {
+                    if !recentSearches.isEmpty {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 4) {
+                                sectionHeader(
+                                    String(localized: "recent_searches"),
+                                    topPadding: 0
+                                )
+                                ForEach(recentSearches, id: \.self) { entry in
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "clock.arrow.circlepath")
+                                            .foregroundStyle(.secondary)
+                                            .frame(width: 48)
+                                        Text(entry)
+                                            .lineLimit(1)
+                                        Spacer(minLength: 0)
+                                    }
+                                    .rowButton(contentHorizontalPadding: 8) {
+                                        selectSearchHistoryEntry(entry)
                                     }
                                 }
-                                .buttonStyle(PlainRowButtonStyle())
-                                .focused($isClearSearchHistoryFocused)
-                                .animation(
-                                    .easeOut(duration: 0.14),
-                                    value: isClearSearchHistoryFocused
-                                )
 
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, 12)
-                            .padding(.top, 20)
-                            .focusSection()
-                        }
-                    } else {
-                        if let artists = result?.artist.map({
-                            $0.filter { ($0.albumCount ?? 0) > 0 }
-                        }), !artists.isEmpty {
-                            sectionHeader(String(localized: "artists"))
-                            ForEach(artists) { artist in
-                                ArtistListRow(
-                                    artist: artist,
-                                    albumCount: artist.albumCount ?? 0
-                                ) {
-                                    commitCurrentSearch()
-                                    path.append(artist)
+                                HStack {
+                                    Button(role: .destructive) {
+                                        clearSearchHistory()
+                                    } label: {
+                                        Label(
+                                            String(localized: "clear_search_history"),
+                                            systemImage: "trash"
+                                        )
+                                        .foregroundStyle(.red)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background {
+                                            Capsule()
+                                                .fill(
+                                                    isClearSearchHistoryFocused
+                                                        ? Color.red.opacity(0.18)
+                                                        : Color.clear
+                                                )
+                                        }
+                                    }
+                                    .buttonStyle(PlainRowButtonStyle())
+                                    .focused($isClearSearchHistoryFocused)
+                                    .animation(
+                                        .easeOut(duration: 0.14),
+                                        value: isClearSearchHistoryFocused
+                                    )
+
+                                    Spacer(minLength: 0)
                                 }
+                                .padding(.horizontal, 12)
+                                .padding(.top, 20)
+                                .focusSection()
                             }
+                            .padding(.top, 8)
+                            .padding(.bottom, 24)
                         }
-                        if let albums = result?.album, !albums.isEmpty {
-                            sectionHeader(String(localized: "albums"))
-                            ForEach(albums) { album in
-                                AlbumListRow(album: album) {
-                                    commitCurrentSearch()
-                                    path.append(album)
-                                }
-                            }
-                        }
-                        if let songs = result?.song, !songs.isEmpty {
-                            sectionHeader(String(localized: "songs"))
-                            ForEach(Array(songs.enumerated()), id: \.element.id) { i, song in
-                                DetailSongRow(song: song, number: i, showArtwork: true) {
-                                    commitCurrentSearch()
-                                    player.play(songs: songs, startIndex: i)
-                                }
-                            }
-                        }
+                        .scrollIndicators(.hidden)
                     }
+                } else if !hasResults {
+                    ContentUnavailableView.search(text: query)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 4) {
+                            if let songs = result?.song, !songs.isEmpty {
+                                sectionHeader(String(localized: "songs"))
+                                ForEach(Array(songs.enumerated()), id: \.element.id) { i, song in
+                                    DetailSongRow(song: song, number: i, showArtwork: true) {
+                                        commitCurrentSearch()
+                                        player.play(songs: songs, startIndex: i)
+                                    }
+                                }
+                            }
+                            if let artists = result?.artist.map({
+                                $0.filter { ($0.albumCount ?? 0) > 0 }
+                            }), !artists.isEmpty {
+                                sectionHeader(String(localized: "artists"))
+                                ForEach(artists) { artist in
+                                    ArtistListRow(
+                                        artist: artist,
+                                        albumCount: artist.albumCount ?? 0
+                                    ) {
+                                        commitCurrentSearch()
+                                        path.append(artist)
+                                    }
+                                }
+                            }
+                            if let albums = result?.album, !albums.isEmpty {
+                                sectionHeader(String(localized: "albums"))
+                                ForEach(albums) { album in
+                                    AlbumListRow(album: album) {
+                                        commitCurrentSearch()
+                                        path.append(album)
+                                    }
+                                }
+                            }
+                            if hasFavoriteResults {
+                                sectionHeader(String(localized: "favorites"))
+                                if !matchedFavoriteSongs.isEmpty {
+                                    ForEach(Array(matchedFavoriteSongs.enumerated()), id: \.element.id) { i, song in
+                                        DetailSongRow(song: song, number: i, showArtwork: true) {
+                                            commitCurrentSearch()
+                                            player.play(songs: matchedFavoriteSongs, startIndex: i)
+                                        }
+                                    }
+                                }
+                                if !matchedFavoriteArtists.isEmpty {
+                                    ForEach(matchedFavoriteArtists) { artist in
+                                        ArtistListRow(
+                                            artist: artist,
+                                            albumCount: artist.albumCount ?? 0
+                                        ) {
+                                            commitCurrentSearch()
+                                            path.append(artist)
+                                        }
+                                    }
+                                }
+                                if !matchedFavoriteAlbums.isEmpty {
+                                    ForEach(matchedFavoriteAlbums) { album in
+                                        AlbumListRow(album: album) {
+                                            commitCurrentSearch()
+                                            path.append(album)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.top, 8)
+                        .padding(.bottom, 24)
+                    }
+                    .scrollIndicators(.hidden)
                 }
-                .padding(.top, 8)
-                .padding(.bottom, 24)
             }
-            .scrollIndicators(.hidden)
             .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
             .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
             .searchable(text: $query, placement: .automatic)
@@ -127,6 +205,9 @@ struct SearchView: View {
             }
             .onAppear {
                 reloadSearchHistory()
+                if showFavoritesInLibrary {
+                    Task { await libraryStore.loadStarred() }
+                }
             }
             .onReceive(
                 NotificationCenter.default.publisher(

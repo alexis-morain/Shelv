@@ -610,7 +610,7 @@
 "Shuffle" = "随机播放";
 "Play or shuffle?" = "播放还是随机播放？";
 "shortcut_order_type" = "播放方式";
-"shortcut_order_in_order" = "播放";
+"shortcut_order_in_order" = "按顺序";
 "shortcut_order_shuffled" = "随机播放";
 "shortcut_order_parameter" = "顺序";
 "shortcut_mix_type" = "混音";
@@ -728,3 +728,8 @@
 "siri_shortcuts_carplay_step_4" = "选择“立即运行”，并在可用时关闭通知。";
 "siri_shortcuts_carplay_footer" = "个人自动化存储在此 iPhone 上，需要由你创建一次。Shelv 无法自动创建。";
 "credential_storage_failed" = "无法完成安全的登录凭据操作。请重试。";
+"shortcut_playback_attributes_parameter" = "播放方式";
+"shortcut_queue_location_parameter" = "队列位置";
+"shortcut_play_choice_play" = "播放";
+"shortcut_play_choice_shuffle" = "随机播放";
+"shortcut_play_or_shuffle_dialog" = "播放还是随机播放？";

@@ -626,7 +626,7 @@
 "Shuffle" = "随机播放";
 "Play or shuffle?" = "播放还是随机播放？";
 "shortcut_order_type" = "播放方式";
-"shortcut_order_in_order" = "播放";
+"shortcut_order_in_order" = "按顺序";
 "shortcut_order_shuffled" = "随机播放";
 "shortcut_order_parameter" = "顺序";
 "shortcut_mix_type" = "混音";
@@ -730,3 +730,8 @@
 "shortcut_media_playback_started" = "已在 Shelv 中开始播放。";
 "credential_storage_failed" = "无法完成安全的登录凭据操作。请重试。";
 "server_no_longer_available" = "该服务器已不可用。";
+"shortcut_playback_attributes_parameter" = "播放方式";
+"shortcut_queue_location_parameter" = "队列位置";
+"shortcut_play_choice_play" = "播放";
+"shortcut_play_choice_shuffle" = "随机播放";
+"shortcut_play_or_shuffle_dialog" = "播放还是随机播放？";

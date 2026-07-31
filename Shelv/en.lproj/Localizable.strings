@@ -610,8 +610,8 @@
 "Shuffle" = "Shuffle";
 "Play or shuffle?" = "Play or shuffle?";
 "shortcut_order_type" = "Playback";
-"shortcut_order_in_order" = "Play";
-"shortcut_order_shuffled" = "Shuffle";
+"shortcut_order_in_order" = "In Order";
+"shortcut_order_shuffled" = "Shuffled";
 "shortcut_order_parameter" = "Order";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Newest";
@@ -728,3 +728,8 @@
 "siri_shortcuts_carplay_step_4" = "Choose Run Immediately and turn off notifications if offered.";
 "siri_shortcuts_carplay_footer" = "Personal automations are stored on this iPhone and must be created once by you. Shelv cannot create them automatically.";
 "credential_storage_failed" = "The secure credential operation could not be completed. Please try again.";
+"shortcut_playback_attributes_parameter" = "Playback";
+"shortcut_queue_location_parameter" = "Queue Position";
+"shortcut_play_choice_play" = "Play";
+"shortcut_play_choice_shuffle" = "Shuffle";
+"shortcut_play_or_shuffle_dialog" = "Play or shuffle?";

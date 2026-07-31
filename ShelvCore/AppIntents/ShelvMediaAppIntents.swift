@@ -837,13 +837,23 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     static let openAppWhenRun = false
     static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
+    @Parameter(title: "shortcut_playable_parameter")
     var audioEntity: ShelvAudioEntity
 
-    @Parameter(default: [])
+    @Parameter(title: "shortcut_playback_attributes_parameter", default: [])
     var playbackAttributes: Set<ShelvAudioPlaybackAttribute>
 
     var warmupAudioQueueResult: ShelvAudioWarmupResult?
+
+    @Parameter(title: "shortcut_queue_location_parameter")
     var queueLocation: ShelvAudioQueueLocation?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("shortcut_play_summary") {
+            \.$audioEntity
+            \.$playbackAttributes
+        }
+    }
 
     @MainActor
     func perform() async throws -> some IntentResult {

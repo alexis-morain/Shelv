@@ -626,8 +626,8 @@
 "Shuffle" = "Mischen";
 "Play or shuffle?" = "Abspielen oder mischen?";
 "shortcut_order_type" = "Wiedergabe";
-"shortcut_order_in_order" = "Abspielen";
-"shortcut_order_shuffled" = "Mischen";
+"shortcut_order_in_order" = "Der Reihe nach";
+"shortcut_order_shuffled" = "Gemischt";
 "shortcut_order_parameter" = "Reihenfolge";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Neueste";
@@ -730,3 +730,8 @@
 "shortcut_media_playback_started" = "Wiedergabe in Shelv gestartet.";
 "credential_storage_failed" = "Der sichere Vorgang mit den Zugangsdaten konnte nicht abgeschlossen werden. Bitte versuche es erneut.";
 "server_no_longer_available" = "Der Server ist nicht mehr verfügbar.";
+"shortcut_playback_attributes_parameter" = "Wiedergabe";
+"shortcut_queue_location_parameter" = "Wiedergabeposition";
+"shortcut_play_choice_play" = "Abspielen";
+"shortcut_play_choice_shuffle" = "Mischen";
+"shortcut_play_or_shuffle_dialog" = "Abspielen oder mischen?";

@@ -2,6 +2,7 @@
 import AppIntents
 import Foundation
 
+@available(iOS, unavailable)
 struct ShelvPlatformPlayableEntity: AppEntity, Identifiable, Hashable, Sendable {
     let reference: ShortcutPlayableReference
     let title: String
@@ -75,6 +76,7 @@ struct ShelvPlatformPlayableQuery: EntityStringQuery {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformShuffleSourceEntity: AppEntity, Identifiable, Hashable, Sendable {
     let playable: ShelvPlatformPlayableEntity
 
@@ -113,6 +115,7 @@ struct ShelvPlatformShuffleSourceQuery: EntityStringQuery {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformPlaylistEntity: AppEntity, Identifiable, Hashable, Sendable {
     let reference: ShortcutPlayableReference
     let title: String
@@ -162,6 +165,7 @@ struct ShelvPlatformPlaylistQuery: EntityStringQuery {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformInstantMixEntity: AppEntity, Identifiable, Hashable, Sendable {
     let playable: ShelvPlatformPlayableEntity
 
@@ -209,6 +213,7 @@ extension ShelvPlatformPlaybackIntent {
 // These actions remain available in the Shortcuts action catalog. Only tvOS
 // publishes natural-language playback phrases below because it has no native
 // Media Intents route. On macOS 27, the audio schema is the single Siri route.
+@available(iOS, unavailable)
 struct ShelvPlatformShuffleAllIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_shuffle_all_title"
     static let description = IntentDescription("shortcut_shuffle_all_description")
@@ -219,6 +224,7 @@ struct ShelvPlatformShuffleAllIntent: ShelvPlatformPlaybackIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformPlayPlayableIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_title"
     static let description = IntentDescription("shortcut_play_description")
@@ -245,6 +251,7 @@ struct ShelvPlatformPlayPlayableIntent: ShelvPlatformPlaybackIntent {
 #if os(macOS)
 /// A text-first companion to ``ShelvPlatformPlayPlayableIntent`` for
 /// automations that pass the output of actions such as "Ask for Input".
+@available(iOS, unavailable)
 struct ShelvPlatformPlayFromTextIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_text_title"
     static let description = IntentDescription("shortcut_play_text_description")
@@ -287,7 +294,7 @@ struct ShelvPlatformPlayFromTextIntent: ShelvPlatformPlaybackIntent {
             } else {
                 let choice = try await $order.requestDisambiguation(
                     among: [.play, .shuffle],
-                    dialog: "Play or shuffle?"
+                    dialog: "shortcut_play_or_shuffle_dialog"
                 )
                 resolvedOrder = choice.playbackOrder
             }
@@ -302,6 +309,7 @@ struct ShelvPlatformPlayFromTextIntent: ShelvPlatformPlaybackIntent {
 }
 #endif
 
+@available(iOS, unavailable)
 struct ShelvPlatformShufflePlayableIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_shuffle_playable_title"
     static let description = IntentDescription("shortcut_shuffle_playable_description")
@@ -322,6 +330,7 @@ struct ShelvPlatformShufflePlayableIntent: ShelvPlatformPlaybackIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformPlayMixIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_mix_title"
     static let description = IntentDescription("shortcut_play_mix_description")
@@ -339,6 +348,7 @@ struct ShelvPlatformPlayMixIntent: ShelvPlatformPlaybackIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformPlayPlaylistIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_playlist_title"
     static let description = IntentDescription("shortcut_play_playlist_description")
@@ -346,19 +356,23 @@ struct ShelvPlatformPlayPlaylistIntent: ShelvPlatformPlaybackIntent {
     @Parameter(title: "shortcut_playlist_parameter")
     var playlist: ShelvPlatformPlaylistEntity
 
+    @Parameter(title: "shortcut_order_parameter", default: .inOrder)
+    var order: ShortcutPlaybackOrder
+
     static var parameterSummary: some ParameterSummary {
-        Summary("shortcut_play_playlist_summary") { \.$playlist }
+        Summary("Play \(\.$playlist) \(\.$order)")
     }
 
     func perform() async throws -> some IntentResult {
         try await ShelvSystemIntentPlaybackService.shared.play(
             playlist.reference,
-            order: .inOrder
+            order: order
         )
         return .result()
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformShufflePlaylistIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_shuffle_playlist_title"
     static let description = IntentDescription("shortcut_shuffle_playlist_description")
@@ -380,6 +394,7 @@ struct ShelvPlatformShufflePlaylistIntent: ShelvPlatformPlaybackIntent {
 }
 
 #if os(macOS)
+@available(iOS, unavailable)
 struct ShelvPlatformPlayDownloadsIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_downloads_title"
     static let description = IntentDescription("shortcut_play_downloads_description")
@@ -398,6 +413,7 @@ struct ShelvPlatformPlayDownloadsIntent: ShelvPlatformPlaybackIntent {
 }
 #endif
 
+@available(iOS, unavailable)
 struct ShelvPlatformInstantMixIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_instant_mix_title"
     static let description = IntentDescription("shortcut_instant_mix_description")
@@ -417,6 +433,7 @@ struct ShelvPlatformInstantMixIntent: ShelvPlatformPlaybackIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformPlayPauseIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_pause_title"
     static let description = IntentDescription("shortcut_play_pause_description")
@@ -427,6 +444,7 @@ struct ShelvPlatformPlayPauseIntent: ShelvPlatformPlaybackIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformNextTrackIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_next_title"
     static let description = IntentDescription("shortcut_next_description")
@@ -437,6 +455,7 @@ struct ShelvPlatformNextTrackIntent: ShelvPlatformPlaybackIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformPreviousTrackIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_previous_title"
     static let description = IntentDescription("shortcut_previous_description")
@@ -458,6 +477,7 @@ extension ShelvPlatformNavigationIntent {
     }
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformOpenPlayerIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_player_title"
     static let description = IntentDescription("shortcut_open_player_description")
@@ -467,6 +487,7 @@ struct ShelvPlatformOpenPlayerIntent: ShelvPlatformNavigationIntent {
     static let destination = ShelvShortcutDestination.nowPlaying
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformOpenSearchIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_search_title"
     static let description = IntentDescription("shortcut_open_search_description")
@@ -476,6 +497,7 @@ struct ShelvPlatformOpenSearchIntent: ShelvPlatformNavigationIntent {
     static let destination = ShelvShortcutDestination.search
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformOpenLibraryIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_library_title"
     static let description = IntentDescription("shortcut_open_library_description")
@@ -485,6 +507,7 @@ struct ShelvPlatformOpenLibraryIntent: ShelvPlatformNavigationIntent {
     static let destination = ShelvShortcutDestination.library
 }
 
+@available(iOS, unavailable)
 struct ShelvPlatformOpenRecapIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_recap_title"
     static let description = IntentDescription("shortcut_open_recap_description")
@@ -494,7 +517,6 @@ struct ShelvPlatformOpenRecapIntent: ShelvPlatformNavigationIntent {
     static let destination = ShelvShortcutDestination.recap
 }
 
-#if os(macOS)
 struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
@@ -640,5 +662,4 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
         )
     }
 }
-#endif
 #endif
