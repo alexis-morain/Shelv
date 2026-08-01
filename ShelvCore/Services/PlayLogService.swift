@@ -421,7 +421,10 @@ actor PlayLogService {
     }
 
     @discardableResult
-    func insertIfNotExists(uuid: String, songId: String, serverId: String, playedAt: Double, songDuration: Double) -> Bool {
+    func insertIfNotExists(
+        uuid: String, songId: String, serverId: String, playedAt: Double, songDuration: Double,
+        songTitle: String? = nil, artistName: String? = nil, albumName: String? = nil
+    ) -> Bool {
         guard pool != nil else { return false }
         var changed = false
         safeWrite { db in
@@ -436,7 +439,7 @@ actor PlayLogService {
                     songId: songId, serverId: serverId,
                     playedAt: playedAt, songDuration: songDuration,
                     uuid: uuid, syncedAt: Date().timeIntervalSince1970,
-                    songTitle: nil, artistName: nil, albumName: nil
+                    songTitle: songTitle, artistName: artistName, albumName: albumName
                 )
                 try record.insert(db)
                 changed = true
@@ -930,15 +933,24 @@ actor PlayLogService {
     }
 
     /// Aktualisiert die Metadaten aller Zeilen eines Songs — der Server hat unter dieser ID geantwortet.
+    /// `syncedAt` wird nur zurückgesetzt, wenn sich die Metadaten wirklich ändern — sonst würde
+    /// jeder Cleanup-Lauf jede unveränderte Zeile erneut zum iCloud-Upload vormerken.
     @discardableResult
     func updateMetadata(serverId: String, songId: String, title: String, artist: String?, album: String?) -> Bool {
         safeWrite { db in
             try db.execute(
                 sql: """
-                    UPDATE play_log SET songTitle = ?, artistName = ?, albumName = ?
+                    UPDATE play_log
+                    SET songTitle = ?, artistName = ?, albumName = ?,
+                        syncedAt = CASE
+                            WHEN uuid IS NOT NULL
+                                AND (songTitle IS NOT ? OR artistName IS NOT ? OR albumName IS NOT ?)
+                            THEN NULL
+                            ELSE syncedAt
+                        END
                     WHERE serverId = ? AND songId = ?
                     """,
-                arguments: [title, artist, album, serverId, songId]
+                arguments: [title, artist, album, title, artist, album, serverId, songId]
             )
         }
     }

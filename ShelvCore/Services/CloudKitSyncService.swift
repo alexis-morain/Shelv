@@ -649,6 +649,9 @@ actor CloudKitSyncService {
                     r["playedAt"]     = event.playedAt
                     r["songDuration"] = event.songDuration
                     r["deviceId"]     = did
+                    if let title = event.songTitle { r["songTitle"] = title }
+                    if let artist = event.artistName { r["artistName"] = artist }
+                    if let album = event.albumName { r["albumName"] = album }
                     return r
                 }
                 guard !records.isEmpty else { return totalUploaded }
@@ -883,7 +886,10 @@ actor CloudKitSyncService {
             if isPlayEventPendingDeletion(uuid) { return stats }
             let changed = await PlayLogService.shared.insertIfNotExists(
                 uuid: uuid, songId: songId, serverId: serverId,
-                playedAt: playedAt, songDuration: duration
+                playedAt: playedAt, songDuration: duration,
+                songTitle: record["songTitle"] as? String,
+                artistName: record["artistName"] as? String,
+                albumName: record["albumName"] as? String
             )
             if changed {
                 stats.playsDownloaded = 1
