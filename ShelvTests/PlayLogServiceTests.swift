@@ -93,6 +93,46 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertEqual(serverBLogs.count, 1)
     }
 
+    /// Regressionstest für einen echten Bug: ein zweites Gerät (z.B. Mac) hat die Zeile schon
+    /// über iCloud, bevor Metadaten existierten. Holt ein anderes Gerät die Metadaten nach und
+    /// re-uploaded dieselbe UUID, darf das zweite Gerät sie beim nächsten Download nicht verwerfen.
+    func testInsertIfNotExistsMergesMetadataIntoAnAlreadyKnownRowWithoutErasingExistingValues() async throws {
+        let service = try await makeService()
+        let now = Date(timeIntervalSince1970: 1_750_000_000).timeIntervalSince1970
+
+        let firstInsert = await service.insertIfNotExists(
+            uuid: "remote-play-1", songId: "song-1", serverId: "server-a",
+            playedAt: now, songDuration: 200
+        )
+        XCTAssertTrue(firstInsert)
+
+        // Re-Download derselben UUID, jetzt mit Metadaten — muss übernommen werden.
+        let metadataArrives = await service.insertIfNotExists(
+            uuid: "remote-play-1", songId: "song-1", serverId: "server-a",
+            playedAt: now, songDuration: 200,
+            songTitle: "Title", artistName: "Artist", albumName: "Album"
+        )
+        XCTAssertTrue(metadataArrives)
+
+        var logs = await service.allPlayLogs(serverId: "server-a")
+        XCTAssertEqual(logs.first?.songTitle, "Title")
+        XCTAssertEqual(logs.first?.artistName, "Artist")
+        XCTAssertEqual(logs.first?.albumName, "Album")
+
+        // Ein Re-Download ohne Metadaten (z.B. von einem Gerät, das noch nicht reconciled hat)
+        // darf die bereits vorhandenen Werte nicht löschen.
+        let staleRedownload = await service.insertIfNotExists(
+            uuid: "remote-play-1", songId: "song-1", serverId: "server-a",
+            playedAt: now, songDuration: 200
+        )
+        XCTAssertFalse(staleRedownload)
+
+        logs = await service.allPlayLogs(serverId: "server-a")
+        XCTAssertEqual(logs.first?.songTitle, "Title")
+        XCTAssertEqual(logs.first?.artistName, "Artist")
+        XCTAssertEqual(logs.first?.albumName, "Album")
+    }
+
     func testTopSongsUsesStableTieBreakers() async throws {
         let service = try await makeService()
         let start = Date(timeIntervalSince1970: 1_750_000_000)
