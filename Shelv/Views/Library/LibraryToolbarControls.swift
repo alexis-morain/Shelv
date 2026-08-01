@@ -88,9 +88,6 @@ struct LibraryGenreFilterMenu: View {
                         .offset(x: 4, y: -3)
                 }
             }
-            // Feste, symmetrische Bounds fürs Label — sonst berechnet iPadOS die
-            // automatische Hover-Markierung anhand des schiefen ZStack-Inhalts
-            // (Icon + versetztes Badge) statt einer sauberen, zentrierten Box.
             .frame(width: 18, height: 18)
             .contentShape(Rectangle())
         }

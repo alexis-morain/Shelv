@@ -125,9 +125,6 @@ struct MainTabView: View {
             } message: {
                 Text(offlineMode.lastServerErrorMessage ?? String(localized: "server_unreachable"))
             }
-            // Echte modale Präsentation statt ZStack-Overlay: gibt tvOS einen eigenen
-            // Fokus-Bereich, damit der Zurück-Knopf zuverlässig TVIdleNowPlayingView
-            // schließt statt (bei verlorenem Fokus-Race) die App zu verlassen.
             .fullScreenCover(isPresented: $showIdleNowPlaying) {
                 TVIdleNowPlayingView(panel: nowPlayingSidePanel) {
                     dismissIdleNowPlaying()
