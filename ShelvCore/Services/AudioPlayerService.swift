@@ -187,6 +187,9 @@ class AudioPlayerService: ObservableObject {
     private var engineSubscriptions = Set<AnyCancellable>()
     private var bufferingShowTask: Task<Void, Never>?
     private var remoteStreamStallTask: Task<Void, Never>?
+    private var remoteStreamFailureRetryTask: Task<Void, Never>?
+    private var remoteStreamFailureRetryPolicy = RemoteStreamFailureRetryPolicy()
+    private static let remoteStreamFailureRetryDelay: Duration = .seconds(2)
     private var radioReconnectTask: Task<Void, Never>?
     private var radioReconnectAttempts = 0
     #if os(tvOS)
@@ -1050,9 +1053,42 @@ class AudioPlayerService: ObservableObject {
     }
 
     @MainActor
+    private func cancelRemoteStreamFailureRetry() {
+        remoteStreamFailureRetryTask?.cancel()
+        remoteStreamFailureRetryTask = nil
+    }
+
+    /// Retries the same remote stream from the current position after a short
+    /// delay instead of surfacing the server-unreachable banner right away.
+    /// Bounded to a small number of attempts so a persistent failure still
+    /// falls through to `stopUnavailableRemotePlayback`.
+    @MainActor
+    private func retryTransientRemoteStreamFailure(song: Song, generation: Int) {
+        guard let url = currentStreamURL else {
+            stopUnavailableRemotePlayback(song: song, generation: generation)
+            return
+        }
+        let resumePosition = currentTime
+        isBuffering = true
+        remoteStreamFailureRetryTask?.cancel()
+        remoteStreamFailureRetryTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.remoteStreamFailureRetryDelay)
+            guard let self, !Task.isCancelled, self.playbackGeneration == generation else { return }
+            self.engine.play(url: url)
+            if resumePosition > 0 {
+                self.engine.seek(to: resumePosition)
+            }
+            self.isPlaying = true
+            self.isEngineLoaded = true
+        }
+    }
+
+    @MainActor
     private func stopUnavailableRemotePlayback(song: Song, generation: Int) {
         guard playbackGeneration == generation else { return }
         cancelRemoteStreamStallWatchdog()
+        cancelRemoteStreamFailureRetry()
+        remoteStreamFailureRetryPolicy.reset()
         pendingNowPlayingElapsedStartTime = nil
         isBuffering = false
         isPlaying = false
@@ -1142,6 +1178,8 @@ class AudioPlayerService: ObservableObject {
         userInitiated: Bool = false
     ) {
         cancelRemoteStreamStallWatchdog()
+        cancelRemoteStreamFailureRetry()
+        remoteStreamFailureRetryPolicy.reset()
         prepareForSongPlayback()
         stopFastSeeking()
         stopEngineForSongTransition(
@@ -2339,7 +2377,7 @@ class AudioPlayerService: ObservableObject {
             self.scheduleRadioReconnect()
         }
 
-        engine.onPlaybackFailed = { [weak self] in
+        engine.onPlaybackFailed = { [weak self] error in
             guard let self else { return }
             self.isEngineLoaded = false
             guard self.isPlaying else { return }
@@ -2353,6 +2391,11 @@ class AudioPlayerService: ObservableObject {
             self.resumeTime = self.currentTime
             let failedRemoteStream = self.currentStreamURL.map { !$0.isFileURL } ?? false
             if failedRemoteStream {
+                if let song = self.currentSong,
+                   self.remoteStreamFailureRetryPolicy.shouldRetry(for: error) {
+                    self.retryTransientRemoteStreamFailure(song: song, generation: self.playbackGeneration)
+                    return
+                }
                 self.isBuffering = false
                 self.isPlaying = false
                 self.nowPlaying.updatePlaybackRate(0, currentTime: self.currentTime)
