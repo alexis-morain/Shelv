@@ -16,7 +16,7 @@ final class PlayerEngine: ObservableObject {
 
     var trustedDuration: TimeInterval = 0
     var onTrackFinished: (() -> Void)?
-    var onPlaybackFailed: (() -> Void)?
+    var onPlaybackFailed: ((Error?) -> Void)?
     var onPlaybackStalled: (() -> Void)?
 
     /// Master-Volume (macOS-Lautstärkeregler). Auf iOS regelt die Hardware;
@@ -165,7 +165,7 @@ final class PlayerEngine: ObservableObject {
         hasFailed = true
         isPlaying = false
         isActuallyPlaying = false
-        onPlaybackFailed?()
+        onPlaybackFailed?(player.currentItem?.error)
     }
 
     func preloadForGapless(url: URL) {

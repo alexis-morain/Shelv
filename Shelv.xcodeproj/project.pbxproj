@@ -26,6 +26,7 @@
 		BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */; };
 		BC1001262FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */; };
 		BC1001282FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */; };
+		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
 		BC10012A2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */; };
 		BC10012C2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012D2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift */; };
 		BC10012E2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */; };
@@ -105,6 +106,7 @@
 		BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/InstantMixQueueBuilder.swift; sourceTree = "<group>"; };
 		BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/SubsonicServer.swift; sourceTree = "<group>"; };
 		BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift; sourceTree = "<group>"; };
+		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConnectivityDebugLog.swift; sourceTree = "<group>"; };
 		BC10012D2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/DownloadModels.swift; sourceTree = "<group>"; };
 		BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DownloadDatabase.swift; sourceTree = "<group>"; };
@@ -261,6 +263,7 @@
 				BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */,
 				BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */,
 				BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */,
+				D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */,
 				BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */,
 				BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */,
 				BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */,
@@ -602,6 +605,7 @@
 				BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */,
 				BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */,
 				BC1001282FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift in Sources */,
+				54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */,
 				BC10012A2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift in Sources */,
 				BC1001302FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift in Sources */,
 				BC1001322FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift in Sources */,
