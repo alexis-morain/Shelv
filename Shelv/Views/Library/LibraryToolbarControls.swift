@@ -121,7 +121,8 @@ struct LibraryGenreFilterMenu: View {
                         .offset(x: 4, y: -3)
                 }
             }
-            .frame(width: 18, height: 18)
+            .padding(.leading, 2)
+            .frame(height: 20)
             .contentShape(Rectangle())
         }
         .tint(accentColor)
