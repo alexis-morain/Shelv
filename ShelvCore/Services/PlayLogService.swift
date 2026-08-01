@@ -10,8 +10,19 @@ struct PlayLogRecord: Codable, FetchableRecord, PersistableRecord {
     var songDuration: Double   // Sekunden
     var uuid: String?          // nil für pre-CloudKit-Zeilen
     var syncedAt: Double?      // nil = Upload ausstehend
+    var songTitle: String?     // nil = Metadaten noch nicht abgeglichen
+    var artistName: String?    // Navidrome erlaubt Songs ohne Artist-Tag
+    var albumName: String?     // Navidrome erlaubt Songs ohne Album-Tag
 
     static let databaseTableName = "play_log"
+}
+
+/// Distinct Song, wie er aktuell im Log steht — Grundlage für den Reconciliation-Task.
+struct PlayLogSongEntry: Equatable {
+    let songId: String
+    let title: String?
+    let artist: String?
+    let album: String?
 }
 
 nonisolated struct RecapRegistryRecord: Codable, FetchableRecord, PersistableRecord, Hashable, Sendable {
@@ -183,6 +194,16 @@ actor PlayLogService {
                     ifNotExists: true
                 )
             }
+            m.registerMigration("v7_play_log_metadata") { db in
+                let cols = try db.columns(in: "play_log").map(\.name)
+                let missing = ["songTitle", "artistName", "albumName"].filter { !cols.contains($0) }
+                guard !missing.isEmpty else { return }
+                try db.alter(table: "play_log") { t in
+                    for column in missing {
+                        t.add(column: column, .text)
+                    }
+                }
+            }
             try m.migrate(p)
             pool = p
             migrateTVScrobbleJournalIfNeeded()
@@ -237,14 +258,17 @@ actor PlayLogService {
     // MARK: - Play Log
 
     #if SHELV_LOGIC_TESTS
-    func insertLegacyPlayForTesting(songId: String, serverId: String, playedAt: Double, songDuration: Double) {
+    func insertLegacyPlayForTesting(
+        songId: String, serverId: String, playedAt: Double, songDuration: Double,
+        title: String? = nil, artist: String? = nil, album: String? = nil
+    ) {
         safeWrite { db in
             try db.execute(
                 sql: """
-                    INSERT INTO play_log (songId, serverId, playedAt, songDuration, uuid, syncedAt)
-                    VALUES (?, ?, ?, ?, NULL, NULL)
+                    INSERT INTO play_log (songId, serverId, playedAt, songDuration, uuid, syncedAt, songTitle, artistName, albumName)
+                    VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?)
                     """,
-                arguments: [songId, serverId, playedAt, songDuration]
+                arguments: [songId, serverId, playedAt, songDuration, title, artist, album]
             )
         }
     }
@@ -257,7 +281,8 @@ actor PlayLogService {
         let record = PlayLogRecord(
             songId: songId, serverId: serverId,
             playedAt: Date().timeIntervalSince1970, songDuration: songDuration,
-            uuid: uuid, syncedAt: nil
+            uuid: uuid, syncedAt: nil,
+            songTitle: nil, artistName: nil, albumName: nil
         )
         let wrote = safeWrite { db in try record.insert(db) }
         guard wrote else { return nil }
@@ -273,7 +298,10 @@ actor PlayLogService {
         serverId: String,
         serverConfigId: String,
         playedAt: Double,
-        songDuration: Double
+        songDuration: Double,
+        songTitle: String? = nil,
+        artistName: String? = nil,
+        albumName: String? = nil
     ) -> String? {
         #if !(os(tvOS) && !SHELV_LOGIC_TESTS)
         guard pool != nil else { return nil }
@@ -285,7 +313,10 @@ actor PlayLogService {
             playedAt: playedAt,
             songDuration: songDuration,
             uuid: uuid,
-            syncedAt: nil
+            syncedAt: nil,
+            songTitle: songTitle,
+            artistName: artistName,
+            albumName: albumName
         )
         let pending = ScrobbleQueueRecord(
             id: nil,
@@ -404,7 +435,8 @@ actor PlayLogService {
                 let record = PlayLogRecord(
                     songId: songId, serverId: serverId,
                     playedAt: playedAt, songDuration: songDuration,
-                    uuid: uuid, syncedAt: Date().timeIntervalSince1970
+                    uuid: uuid, syncedAt: Date().timeIntervalSince1970,
+                    songTitle: nil, artistName: nil, albumName: nil
                 )
                 try record.insert(db)
                 changed = true
@@ -872,6 +904,61 @@ actor PlayLogService {
             try String.fetchAll(db, sql: "SELECT DISTINCT songId FROM play_log WHERE serverId = ?",
                                 arguments: [serverId])
         }) ?? []
+    }
+
+    /// Alle distinct Songs mit ihren aktuell gespeicherten Metadaten — Grundlage für den
+    /// ID+Metadaten-Reconciliation-Task. `MAX` pickt den ersten nicht-NULL-Wert, falls
+    /// einzelne Zeilen eines Songs (noch) unterschiedlich befüllt sind.
+    func distinctSongEntries(serverId: String) -> [PlayLogSongEntry] {
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT songId, MAX(songTitle) AS songTitle, MAX(artistName) AS artistName, MAX(albumName) AS albumName
+                FROM play_log
+                WHERE serverId = ?
+                GROUP BY songId
+                """, arguments: [serverId])
+            .map {
+                PlayLogSongEntry(
+                    songId: $0["songId"],
+                    title: $0["songTitle"],
+                    artist: $0["artistName"],
+                    album: $0["albumName"]
+                )
+            }
+        }) ?? []
+    }
+
+    /// Aktualisiert die Metadaten aller Zeilen eines Songs — der Server hat unter dieser ID geantwortet.
+    @discardableResult
+    func updateMetadata(serverId: String, songId: String, title: String, artist: String?, album: String?) -> Bool {
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                    UPDATE play_log SET songTitle = ?, artistName = ?, albumName = ?
+                    WHERE serverId = ? AND songId = ?
+                    """,
+                arguments: [title, artist, album, serverId, songId]
+            )
+        }
+    }
+
+    /// Repariert eine tote ID: übernimmt die per Metadaten-Suche gefundene neue Song-ID
+    /// (inkl. ihrer aktuellen Metadaten) für alle Zeilen, die noch die alte ID trugen.
+    @discardableResult
+    func repairSongId(
+        serverId: String, oldSongId: String, newSongId: String,
+        title: String, artist: String?, album: String?
+    ) -> Bool {
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                    UPDATE play_log SET songId = ?, songTitle = ?, artistName = ?, albumName = ?, syncedAt = NULL
+                    WHERE serverId = ? AND songId = ?
+                    """,
+                arguments: [newSongId, title, artist, album, serverId, oldSongId]
+            )
+        }
     }
 
     /// Anzahl verschiedener Songs im Log — günstig (COUNT), für die Mix-Schwellenprüfung.

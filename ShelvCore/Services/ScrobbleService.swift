@@ -107,7 +107,10 @@ actor ScrobbleService {
         serverId: String,
         serverConfigId: String,
         playedAt: Double,
-        songDuration: Double
+        songDuration: Double,
+        songTitle: String? = nil,
+        artistName: String? = nil,
+        albumName: String? = nil
     ) async -> Bool {
         await PlayLogService.shared.setup()
         let uuid = await PlayLogService.shared.recordPlayAndQueueScrobble(
@@ -115,7 +118,10 @@ actor ScrobbleService {
             serverId: serverId,
             serverConfigId: serverConfigId,
             playedAt: playedAt,
-            songDuration: songDuration
+            songDuration: songDuration,
+            songTitle: songTitle,
+            artistName: artistName,
+            albumName: albumName
         )
         guard uuid != nil else { return false }
         await flushPendingScrobbles()

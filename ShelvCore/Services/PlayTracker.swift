@@ -19,6 +19,9 @@ final class PlayTracker {
     private var trackedSongId: String?
     private var trackedServerId: String?
     private var trackedServerConfigId: String?
+    private var trackedTitle: String?
+    private var trackedArtist: String?
+    private var trackedAlbum: String?
     private var trackedDuration: Double = 0
     private var playedSeconds: Double = 0
     private var lastTime: Double = -1
@@ -102,6 +105,9 @@ final class PlayTracker {
         trackedSongId = event.song.id
         trackedServerConfigId = event.serverConfigId
         trackedServerId = event.serverId
+        trackedTitle = event.song.title
+        trackedArtist = event.song.artist
+        trackedAlbum = event.song.album
         trackedDuration = event.song.duration.map(Double.init) ?? 0
         playedSeconds = 0
         lastTime = -1
@@ -125,6 +131,9 @@ final class PlayTracker {
         let token = trackingToken
         let playedAt = Date().timeIntervalSince1970
         let duration = trackedDuration
+        let title = trackedTitle
+        let artist = trackedArtist
+        let album = trackedAlbum
 
         Task { [weak self] in
             let recorded = await ScrobbleService.shared.recordPlay(
@@ -132,7 +141,10 @@ final class PlayTracker {
                 serverId: serverId,
                 serverConfigId: serverConfigId,
                 playedAt: playedAt,
-                songDuration: duration
+                songDuration: duration,
+                songTitle: title,
+                artistName: artist,
+                albumName: album
             )
             guard recorded else {
                 if self?.trackingToken == token {
@@ -159,6 +171,9 @@ final class PlayTracker {
         trackedSongId = nil
         trackedServerId = nil
         trackedServerConfigId = nil
+        trackedTitle = nil
+        trackedArtist = nil
+        trackedAlbum = nil
         trackedDuration = 0
         playedSeconds = 0
         lastTime = -1

@@ -263,8 +263,15 @@ class ServerStore: ObservableObject {
             let verifiedBackfill = previousStableID == nil
                 && updatedStableID != nil
                 && !authenticationConfigurationChanged
+            // Reine Rotation der Server-seitigen stableId (z.B. Navidrome-ID-Migration),
+            // ohne dass sich Zugangsdaten geändert haben: sauber ummappen statt zu wipen.
+            let stableIdRotated =
+                !authenticationConfigurationChanged
+                && previousStableID != nil
+                && updatedStableID != nil
+                && previousStableID != updatedStableID
             let accountIdentityChanged =
-                (previousStableID != updatedStableID && !verifiedBackfill)
+                (previousStableID != updatedStableID && !verifiedBackfill && !stableIdRotated)
                 || (authenticationConfigurationChanged
                     && (previousStableID == nil || updatedStableID == nil))
 
@@ -312,6 +319,13 @@ class ServerStore: ObservableObject {
                 Task {
                     await PlayLogService.shared.migrateServerId(
                         from: previous.id.uuidString,
+                        to: updatedStableID
+                    )
+                }
+            } else if stableIdRotated, let previousStableID, let updatedStableID {
+                Task {
+                    await PlayLogService.shared.migrateServerId(
+                        from: previousStableID,
                         to: updatedStableID
                     )
                 }

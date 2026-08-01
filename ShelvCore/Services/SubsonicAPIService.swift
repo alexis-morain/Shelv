@@ -1430,6 +1430,26 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return result
     }
 
+    func search(
+        query: String,
+        context: SubsonicServerRequestContext
+    ) async throws -> SearchResult {
+        let body = try await fetchDecoded(
+            Envelope<SearchBody>.self,
+            for: context.server,
+            password: context.password,
+            path: "search3",
+            extra: [
+                URLQueryItem(name: "query", value: query),
+                URLQueryItem(name: "artistCount", value: "10"),
+                URLQueryItem(name: "albumCount", value: "10"),
+                URLQueryItem(name: "songCount", value: "20")
+            ]
+        ).response
+        try check(status: body.status, error: body.error)
+        return body.searchResult3 ?? SearchResult(artist: nil, album: nil, song: nil)
+    }
+
     func getNewestSongs(albumCount: Int = 10) async throws -> [Song] {
         try await fetchSongsFromAlbums(type: "newest", albumCount: albumCount)
     }

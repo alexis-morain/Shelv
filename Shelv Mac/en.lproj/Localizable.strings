@@ -244,12 +244,13 @@
 "database_cleanup" = "Database cleanup";
 "database_cleanup_2" = "Clean up database?";
 "clean_up" = "Clean up";
-"checks_every_song_against_the_server_and_permanent" = "Checks every song in the log against the server and permanently removes entries the server no longer knows — locally and in iCloud. Only definitive 'not found' responses are removed; temporary network errors never delete anything.";
+"checks_every_song_against_the_server_and_permanent" = "Checks every song in the log against the server. If the song still exists, its title/artist/album are refreshed; if its ID changed but a title+artist+album match is found, it's repaired in place. Only removed — locally and in iCloud — if neither the ID nor a metadata match resolves. Temporary network errors and ambiguous matches never delete anything.";
 "checking_count_format" = "Checking %d/%d…";
 "cleaning_up" = "Cleaning up…";
 "no_entries_to_check" = "No entries to check";
 "no_dead_entries_found" = "No dead entries found";
 "cleanup_removed_format" = "Removed %d dead songs (%d plays)";
+"cleanup_summary_format" = "Refreshed %d, repaired %d, removed %d dead songs (%d plays)";
 "cleanup_complete" = "Cleanup complete";
 "reset_local_database" = "Reset local database";
 "deleting" = "Deleting…";
