@@ -53,95 +53,92 @@ struct MainTabView: View {
     }
 
     var body: some View {
-        ZStack {
-            tabView
-
-            if showIdleNowPlaying {
+        tabView
+            .simultaneousGesture(TapGesture().onEnded {
+                if !showIdleNowPlaying {
+                    registerUserActivity()
+                }
+            })
+            .onPlayPauseCommand {
+                if !showIdleNowPlaying {
+                    registerUserActivity()
+                    player.togglePlayPause()
+                }
+            }
+            .onChange(of: showPlaylistsTab) { _, _ in
+                syncVisibleTabsIfAllowed()
+            }
+            .onChange(of: showRadio) { _, _ in
+                syncVisibleTabsIfAllowed()
+            }
+            .onChange(of: offlineMode.isOffline) { _, _ in
+                syncVisibleTabs()
+            }
+            .onChange(of: selection) { _, newSelection in
+                if newSelection != "settings" {
+                    syncVisibleTabs()
+                }
+                updateIdleNowPlayingAvailability()
+            }
+            .onChange(of: visibleShowPlaylistsTab) { _, on in
+                if !on && selection == "playlists" { selection = "settings" }
+            }
+            .onChange(of: visibleShowRadio) { _, on in
+                if !on && selection == "radio" { selection = "search" }
+            }
+            .onChange(of: player.isPlaying) { _, _ in
+                updateIdleNowPlayingAvailability()
+            }
+            .onChange(of: player.currentSong?.id) { _, _ in
+                updateIdleNowPlayingAvailability()
+            }
+            .onChange(of: player.currentRadioStation?.id) { _, _ in
+                updateIdleNowPlayingAvailability()
+            }
+            .onChange(of: nowPlayingSidePanel) { _, _ in
+                updateIdleNowPlayingAvailability()
+            }
+            .onChange(of: nowPlayingRootVisible) { _, _ in
+                updateIdleNowPlayingAvailability()
+            }
+            // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
+            // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
+            .alert(String(localized: "queue_available_title"), isPresented: Binding(
+                get: { queueSync.pendingRemote != nil },
+                set: { if !$0 { queueSync.dismissPending() } }
+            )) {
+                Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
+                Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
+            } message: {
+                Text(String(localized: "queue_available_subtitle"))
+            }
+            .task(id: queueSync.pendingRemote?.signature) {
+                await dismissPendingQueueAfterDelay()
+            }
+            .alert(serverErrorAlertTitle, isPresented: Binding(
+                get: { offlineMode.serverErrorBannerVisible },
+                set: { if !$0 { offlineMode.dismissBanner() } }
+            )) {
+                Button(String(localized: "ok"), role: .cancel) {
+                    offlineMode.dismissBanner()
+                }
+            } message: {
+                Text(offlineMode.lastServerErrorMessage ?? String(localized: "server_unreachable"))
+            }
+            // Echte modale Präsentation statt ZStack-Overlay: gibt tvOS einen eigenen
+            // Fokus-Bereich, damit der Zurück-Knopf zuverlässig TVIdleNowPlayingView
+            // schließt statt (bei verlorenem Fokus-Race) die App zu verlassen.
+            .fullScreenCover(isPresented: $showIdleNowPlaying) {
                 TVIdleNowPlayingView(panel: nowPlayingSidePanel) {
                     dismissIdleNowPlaying()
                 }
-                .transition(.opacity)
-                .zIndex(1)
             }
-        }
-        .animation(.easeInOut(duration: 0.25), value: showIdleNowPlaying)
-        .simultaneousGesture(TapGesture().onEnded {
-            if !showIdleNowPlaying {
-                registerUserActivity()
+            .onAppear {
+                scheduleIdleNowPlayingIfNeeded()
             }
-        })
-        .onPlayPauseCommand {
-            if !showIdleNowPlaying {
-                registerUserActivity()
-                player.togglePlayPause()
+            .onDisappear {
+                idleNowPlayingTask?.cancel()
             }
-        }
-        .onChange(of: showPlaylistsTab) { _, _ in
-            syncVisibleTabsIfAllowed()
-        }
-        .onChange(of: showRadio) { _, _ in
-            syncVisibleTabsIfAllowed()
-        }
-        .onChange(of: offlineMode.isOffline) { _, _ in
-            syncVisibleTabs()
-        }
-        .onChange(of: selection) { _, newSelection in
-            if newSelection != "settings" {
-                syncVisibleTabs()
-            }
-            updateIdleNowPlayingAvailability()
-        }
-        .onChange(of: visibleShowPlaylistsTab) { _, on in
-            if !on && selection == "playlists" { selection = "settings" }
-        }
-        .onChange(of: visibleShowRadio) { _, on in
-            if !on && selection == "radio" { selection = "search" }
-        }
-        .onChange(of: player.isPlaying) { _, _ in
-            updateIdleNowPlayingAvailability()
-        }
-        .onChange(of: player.currentSong?.id) { _, _ in
-            updateIdleNowPlayingAvailability()
-        }
-        .onChange(of: player.currentRadioStation?.id) { _, _ in
-            updateIdleNowPlayingAvailability()
-        }
-        .onChange(of: nowPlayingSidePanel) { _, _ in
-            updateIdleNowPlayingAvailability()
-        }
-        .onChange(of: nowPlayingRootVisible) { _, _ in
-            updateIdleNowPlayingAvailability()
-        }
-        // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
-        // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
-        .alert(String(localized: "queue_available_title"), isPresented: Binding(
-            get: { queueSync.pendingRemote != nil },
-            set: { if !$0 { queueSync.dismissPending() } }
-        )) {
-            Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
-            Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
-        } message: {
-            Text(String(localized: "queue_available_subtitle"))
-        }
-        .task(id: queueSync.pendingRemote?.signature) {
-            await dismissPendingQueueAfterDelay()
-        }
-        .alert(serverErrorAlertTitle, isPresented: Binding(
-            get: { offlineMode.serverErrorBannerVisible },
-            set: { if !$0 { offlineMode.dismissBanner() } }
-        )) {
-            Button(String(localized: "ok"), role: .cancel) {
-                offlineMode.dismissBanner()
-            }
-        } message: {
-            Text(offlineMode.lastServerErrorMessage ?? String(localized: "server_unreachable"))
-        }
-        .onAppear {
-            scheduleIdleNowPlayingIfNeeded()
-        }
-        .onDisappear {
-            idleNowPlayingTask?.cancel()
-        }
     }
 
     private var tabView: some View {
