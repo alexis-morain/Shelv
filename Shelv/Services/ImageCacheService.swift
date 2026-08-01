@@ -6,11 +6,15 @@ actor ImageCacheService {
     nonisolated(unsafe) private let memory = NSCache<NSString, UIImage>()
     private let cacheDir: URL
     private var inflight: [String: Task<UIImage?, Never>] = [:]
+    private var waiters: [String: Int] = [:]
     private var writesSinceTrim = 0
+    private var activeDownloads = 0
+    private var downloadWaitQueue: [CheckedContinuation<Void, Never>] = []
 
     private static let diskLimitBytes = 1_073_741_824 // 1 GB
     private static let diskTrimTarget  = 900 * 1024 * 1024 // 900 MB (hysteresis)
     private static let writesPerTrimCheck = 20
+    private static let maxConcurrentDownloads = 6
     private static let defaultFallbackSizes = [600, 300, 240, 200, 192, 180, 160, 156, 150, 120, 100, 80, 50]
     private static let fallbackSizesByPreferred: [Int: [Int]] = Dictionary(
         uniqueKeysWithValues: defaultFallbackSizes.map { preferred in
@@ -88,11 +92,26 @@ actor ImageCacheService {
     func image(url: URL, key: String) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
 
+        waiters[key, default: 0] += 1
+        defer {
+            let remaining = waiters[key, default: 1] - 1
+            if remaining <= 0 {
+                waiters.removeValue(forKey: key)
+            } else {
+                waiters[key] = remaining
+            }
+        }
+
         if let existing = inflight[key] {
-            return await existing.value
+            return await withTaskCancellationHandler {
+                await existing.value
+            } onCancel: { [weak self] in
+                Task { await self?.cancelIfLastWaiter(key) }
+            }
         }
 
         let diskURL = cacheDir.appendingPathComponent(key.pathSafeComponent)
+        let cache = self
 
         let task = Task.detached(priority: .medium) { () -> UIImage? in
             if Task.isCancelled { return nil }
@@ -101,6 +120,9 @@ actor ImageCacheService {
                 return img
             }
             if Task.isCancelled { return nil }
+            await cache.acquireDownloadSlot()
+            defer { Task { await cache.releaseDownloadSlot() } }
+            if Task.isCancelled { return nil }
             guard let (data, img) = await Self.downloadImage(from: url) else { return nil }
             if Task.isCancelled { return nil }
             try? data.write(to: diskURL, options: .atomic)
@@ -108,7 +130,11 @@ actor ImageCacheService {
         }
 
         inflight[key] = task
-        let img = await task.value
+        let img = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: { [weak self] in
+            Task { await self?.cancelIfLastWaiter(key) }
+        }
         inflight.removeValue(forKey: key)
 
         if let img {
@@ -125,6 +151,33 @@ actor ImageCacheService {
         }
 
         return img
+    }
+
+    /// Cancels the shared in-flight download only once every caller waiting
+    /// on it has itself been cancelled — a scrolled-away cell shouldn't abort
+    /// a fetch another still-visible cell is also waiting on.
+    private func cancelIfLastWaiter(_ key: String) {
+        if (waiters[key] ?? 0) <= 1 {
+            inflight[key]?.cancel()
+        }
+    }
+
+    private func acquireDownloadSlot() async {
+        if activeDownloads < Self.maxConcurrentDownloads {
+            activeDownloads += 1
+            return
+        }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            downloadWaitQueue.append(continuation)
+        }
+        activeDownloads += 1
+    }
+
+    private func releaseDownloadSlot() {
+        activeDownloads -= 1
+        if !downloadWaitQueue.isEmpty {
+            downloadWaitQueue.removeFirst().resume()
+        }
     }
 
     nonisolated private static func downloadImage(from url: URL) async -> (Data, UIImage)? {
