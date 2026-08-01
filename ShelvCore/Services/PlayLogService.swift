@@ -429,9 +429,35 @@ actor PlayLogService {
         var changed = false
         safeWrite { db in
             if let existing = try PlayLogRecord.filter(Column("uuid") == uuid).fetchOne(db) {
+                // Ein anderes Gerät kann dieselbe Zeile später mit frisch nachgeholten
+                // Metadaten re-uploaden (Database-Cleanup-Backfill) — die dürfen hier nicht
+                // verworfen werden, nur weil die Zeile lokal schon existiert.
+                var setClauses: [String] = []
+                var args: [DatabaseValueConvertible] = []
                 if existing.serverId != serverId {
-                    try db.execute(sql: "UPDATE play_log SET serverId = ? WHERE uuid = ?",
-                                   arguments: [serverId, uuid])
+                    setClauses.append("serverId = ?")
+                    args.append(serverId)
+                }
+                // Ein nil vom Absender heißt "hat dazu (noch) nichts gesagt", nicht "ist leer" —
+                // ein fehlender Wert darf nie bereits vorhandene lokale Metadaten löschen.
+                if let songTitle, existing.songTitle != songTitle {
+                    setClauses.append("songTitle = ?")
+                    args.append(songTitle)
+                }
+                if let artistName, existing.artistName != artistName {
+                    setClauses.append("artistName = ?")
+                    args.append(artistName)
+                }
+                if let albumName, existing.albumName != albumName {
+                    setClauses.append("albumName = ?")
+                    args.append(albumName)
+                }
+                if !setClauses.isEmpty {
+                    args.append(uuid)
+                    try db.execute(
+                        sql: "UPDATE play_log SET \(setClauses.joined(separator: ", ")) WHERE uuid = ?",
+                        arguments: StatementArguments(args)
+                    )
                     changed = db.changesCount > 0
                 }
             } else {
