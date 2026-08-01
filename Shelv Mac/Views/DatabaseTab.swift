@@ -190,48 +190,34 @@ struct DatabaseTab: View {
             cleanupTotal = 0
         }
 
-        let ids = await PlayLogService.shared.distinctSongIds(serverId: sid)
-        guard !ids.isEmpty else {
+        guard let requestContext = try? await SubsonicAPIService.shared.resolvedActiveRequestContext(
+            expectedServerId: sid
+        ) else {
             cleanupResult = String(localized: "no_entries_to_check")
             return
         }
-        cleanupTotal = ids.count
 
-        var dead: [String] = []
-        await withTaskGroup(of: (String, Bool).self) { group in
-            var iterator = ids.makeIterator()
-            let maxConcurrent = 6
-            var inFlight = 0
-            while inFlight < maxConcurrent, let id = iterator.next() {
-                inFlight += 1
-                group.addTask { (id, await songIsDead(id: id)) }
-            }
-            for await (id, isDead) in group {
-                cleanupChecked += 1
-                if isDead { dead.append(id) }
-                if let next = iterator.next() {
-                    group.addTask { (next, await songIsDead(id: next)) }
-                }
-            }
+        let summary = await CloudKitSyncService.shared.reconcilePlayLog(
+            serverId: sid,
+            requestContext: requestContext
+        ) { checked, total in
+            cleanupChecked = checked
+            cleanupTotal = total
         }
 
-        guard !dead.isEmpty else {
-            await refreshTotalPlays()
-            cleanupDone = true
-            cleanupResult = String(localized: "no_dead_entries_found")
+        guard summary.checked > 0 else {
+            cleanupResult = String(localized: "no_entries_to_check")
             return
         }
 
-        let cleanup = await CloudKitSyncService.shared.removeDeadPlayLogEntries(
-            songIds: dead,
-            serverId: sid
-        )
         await refreshTotalPlays()
         cleanupDone = true
         cleanupResult = String(
-            format: String(localized: "cleanup_removed_format"),
-            dead.count,
-            cleanup.removedRows
+            format: String(localized: "cleanup_summary_format"),
+            summary.refreshed,
+            summary.repaired,
+            summary.deletedSongs,
+            summary.removedRows
         )
     }
 
@@ -429,18 +415,5 @@ struct ICloudSyncTab: View {
         await CloudKitSyncService.shared.deleteZone(force: true)
         await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
         await CloudKitSyncService.shared.updatePendingCounts()
-    }
-}
-
-private func songIsDead(id: String) async -> Bool {
-    do {
-        _ = try await SubsonicAPIService.shared.getSong(id: id)
-        return false
-    } catch SubsonicAPIError.apiError(let code, let message) {
-        if code == 70 { return true }
-        if code == 0, (message ?? "").range(of: "not found", options: .caseInsensitive) != nil { return true }
-        return false
-    } catch {
-        return false
     }
 }

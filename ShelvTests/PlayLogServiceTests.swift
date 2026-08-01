@@ -112,75 +112,111 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertEqual(topSongs.map(\.count), [2, 2, 2, 1])
     }
 
-    func testDeadSongCleanupPromotesValidSongsWithinOneStabilization() async throws {
+    /// Ersetzt die alte "Stabilization"-Erwartung: ein toter Top-Song darf die Recap-Playlist
+    /// nicht kaputt machen, aber die Datenbank selbst bleibt unangetastet — Löschen/Reparieren
+    /// ist ausschließlich Aufgabe des manuellen Database-Cleanups (siehe PlayLogReconciliationLogicTests).
+    func testExpectedSongsLogicSkipsDeadTopSongsInMemoryWithoutTouchingDatabase() async throws {
         let service = try await makeService()
         let start = Date(timeIntervalSince1970: 1_750_000_000)
         let end = Date(timeIntervalSince1970: 1_750_001_000)
 
         for offset in [10.0, 20.0, 30.0] {
             await service.insertLegacyPlayForTesting(
-                songId: "dead-a",
-                serverId: "server-a",
-                playedAt: start.timeIntervalSince1970 + offset,
-                songDuration: 180
+                songId: "dead-a", serverId: "server-a",
+                playedAt: start.timeIntervalSince1970 + offset, songDuration: 180
             )
         }
         for offset in [40.0, 50.0] {
             await service.insertLegacyPlayForTesting(
-                songId: "dead-b",
-                serverId: "server-a",
-                playedAt: start.timeIntervalSince1970 + offset,
-                songDuration: 180
+                songId: "dead-b", serverId: "server-a",
+                playedAt: start.timeIntervalSince1970 + offset, songDuration: 180
             )
         }
         await service.insertLegacyPlayForTesting(
-            songId: "valid",
-            serverId: "server-a",
-            playedAt: start.timeIntervalSince1970 + 60,
-            songDuration: 180
+            songId: "valid", serverId: "server-a",
+            playedAt: start.timeIntervalSince1970 + 60, songDuration: 180
         )
 
         let deadSongIds = Set(["dead-a", "dead-b"])
-        var cleanupCalls: [[String]] = []
-        let finalIds: [String] = try await RecapSyncLogic.stabilized(
-            scan: {
-                let ids = await service.topSongs(
-                    serverId: "server-a",
-                    from: start,
-                    to: end,
-                    limit: 1
-                ).map(\.songId)
-                return (ids, Set(ids.filter { deadSongIds.contains($0) }))
-            },
-            removeDeadSongIds: { ids in
-                cleanupCalls.append(ids)
-                return await service.deletePlays(forSongIds: ids, serverId: "server-a")
-            }
+        let candidatePool = await service.topSongs(serverId: "server-a", from: start, to: end, limit: 3).map(\.songId)
+        XCTAssertEqual(candidatePool, ["dead-a", "dead-b", "valid"])
+
+        let resolution = try await RecapExpectedSongsLogic.resolveExpectedIds(
+            initial: Array(candidatePool.prefix(1)),
+            backups: Array(candidatePool.dropFirst(1)),
+            alreadyKnownAlive: { _ in false },
+            resolve: { id in deadSongIds.contains(id) ? nil : id }
         )
 
-        let remainingSongIds = await service.allPlayLogs(serverId: "server-a").map(\.songId)
-        XCTAssertEqual(finalIds, ["valid"])
-        XCTAssertEqual(cleanupCalls, [["dead-a"], ["dead-b"]])
-        XCTAssertEqual(remainingSongIds, ["valid"])
+        XCTAssertEqual(resolution.finalIds, ["valid"])
 
-        let secondPassIds: [String] = try await RecapSyncLogic.stabilized(
-            scan: {
-                let ids = await service.topSongs(
-                    serverId: "server-a",
-                    from: start,
-                    to: end,
-                    limit: 1
-                ).map(\.songId)
-                return (ids, Set(ids.filter { deadSongIds.contains($0) }))
-            },
-            removeDeadSongIds: { ids in
-                cleanupCalls.append(ids)
-                return await service.deletePlays(forSongIds: ids, serverId: "server-a")
-            }
+        // Kein Löschvorgang wurde je aufgerufen — die toten Zeilen sind unverändert noch da.
+        let remainingSongIds = Set(await service.allPlayLogs(serverId: "server-a").map(\.songId))
+        XCTAssertEqual(remainingSongIds, ["dead-a", "dead-b", "valid"])
+    }
+
+    func testDistinctSongEntriesFoldsRowsAndPicksUpAnyNonNilMetadata() async throws {
+        let service = try await makeService()
+        let now = Date(timeIntervalSince1970: 1_750_000_000).timeIntervalSince1970
+
+        await service.insertLegacyPlayForTesting(
+            songId: "song-1", serverId: "server-a", playedAt: now, songDuration: 180
+        )
+        await service.insertLegacyPlayForTesting(
+            songId: "song-1", serverId: "server-a", playedAt: now + 1, songDuration: 180,
+            title: "Title", artist: "Artist", album: "Album"
+        )
+        await service.insertLegacyPlayForTesting(
+            songId: "song-2", serverId: "server-a", playedAt: now, songDuration: 180
         )
 
-        XCTAssertEqual(secondPassIds, ["valid"])
-        XCTAssertEqual(cleanupCalls, [["dead-a"], ["dead-b"]])
+        let entries = await service.distinctSongEntries(serverId: "server-a")
+            .sorted { $0.songId < $1.songId }
+
+        XCTAssertEqual(entries.count, 2)
+        XCTAssertEqual(entries[0], PlayLogSongEntry(songId: "song-1", title: "Title", artist: "Artist", album: "Album"))
+        XCTAssertEqual(entries[1], PlayLogSongEntry(songId: "song-2", title: nil, artist: nil, album: nil))
+    }
+
+    func testUpdateMetadataOverwritesAllRowsSharingThatSongId() async throws {
+        let service = try await makeService()
+        let now = Date(timeIntervalSince1970: 1_750_000_000).timeIntervalSince1970
+
+        await service.insertLegacyPlayForTesting(
+            songId: "song-1", serverId: "server-a", playedAt: now, songDuration: 180,
+            title: "Old", artist: "Old Artist", album: "Old Album"
+        )
+        await service.insertLegacyPlayForTesting(
+            songId: "song-1", serverId: "server-a", playedAt: now + 1, songDuration: 180
+        )
+
+        await service.updateMetadata(serverId: "server-a", songId: "song-1", title: "New", artist: "New Artist", album: nil)
+
+        let logs = await service.allPlayLogs(serverId: "server-a")
+        XCTAssertEqual(logs.count, 2)
+        XCTAssertTrue(logs.allSatisfy { $0.songTitle == "New" && $0.artistName == "New Artist" && $0.albumName == nil })
+    }
+
+    func testRepairSongIdRewritesIdAndMetadataAndMarksRowsForResync() async throws {
+        let service = try await makeService()
+
+        let maybeUuid = await service.log(songId: "old-id", serverId: "server-a", songDuration: 180)
+        let uuid = try XCTUnwrap(maybeUuid)
+        await service.markSynced(uuids: [uuid])
+
+        await service.repairSongId(
+            serverId: "server-a", oldSongId: "old-id", newSongId: "new-id",
+            title: "Title", artist: "Artist", album: "Album"
+        )
+
+        let logs = await service.allPlayLogs(serverId: "server-a")
+        XCTAssertEqual(logs.count, 1)
+        XCTAssertEqual(logs.first?.songId, "new-id")
+        XCTAssertEqual(logs.first?.songTitle, "Title")
+        XCTAssertEqual(logs.first?.artistName, "Artist")
+        XCTAssertEqual(logs.first?.albumName, "Album")
+        // syncedAt wird zurückgesetzt, damit die reparierte Zeile erneut nach iCloud hochgeladen wird.
+        XCTAssertNil(logs.first?.syncedAt)
     }
 
     func testKeepOnlyRegistryEntryForSamePeriodKeepsCanonicalRecordOnlyForMatchingBucket() async throws {

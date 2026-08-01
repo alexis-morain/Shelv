@@ -1917,40 +1917,99 @@ actor CloudKitSyncService {
         log("Initial iCloud sync complete")
     }
 
+    struct PlayLogReconciliationSummary {
+        let checked: Int
+        let refreshed: Int
+        let repaired: Int
+        let deletedSongs: Int
+        let removedRows: Int
+        let deletedCloudEvents: Int
+    }
+
     private func cleanupDeadPlayLogEntries(
         serverId: String,
         requestContext: SubsonicServerRequestContext
     ) async -> (checkedSongs: Int, removedRows: Int, deletedCloudEvents: Int) {
-        let ids = await PlayLogService.shared.distinctSongIds(serverId: serverId)
-        guard !ids.isEmpty else { return (0, 0, 0) }
+        let summary = await reconcilePlayLog(serverId: serverId, requestContext: requestContext)
+        return (summary.checked, summary.removedRows, summary.deletedCloudEvents)
+    }
 
-        var dead: [String] = []
-        await withTaskGroup(of: (String, Bool).self) { group in
-            var iterator = ids.makeIterator()
+    /// Datenbank-Cleanup-Task: prüft jeden im Log distinct vorkommenden Song. Pro Song sind ID
+    /// und Titel+Artist+Album zwei unabhängige Wege, denselben Song serverseitig zu finden —
+    /// löst genau ein Weg auf, wird der andere repariert; löst keiner auf, wird die Zeile gelöscht.
+    /// Netzwerkfehler und mehrdeutige Metadaten-Treffer lassen die Zeile unangetastet.
+    @discardableResult
+    func reconcilePlayLog(
+        serverId: String,
+        requestContext: SubsonicServerRequestContext,
+        progress: (@MainActor @Sendable (Int, Int) -> Void)? = nil
+    ) async -> PlayLogReconciliationSummary {
+        let entries = await PlayLogService.shared.distinctSongEntries(serverId: serverId)
+        guard !entries.isEmpty else {
+            return PlayLogReconciliationSummary(
+                checked: 0, refreshed: 0, repaired: 0, deletedSongs: 0, removedRows: 0, deletedCloudEvents: 0
+            )
+        }
+
+        var checked = 0
+        var refreshed = 0
+        var repaired = 0
+        var toDelete: [String] = []
+
+        await withTaskGroup(of: (PlayLogSongEntry, PlayLogReconciliationOutcome).self) { group in
+            var iterator = entries.makeIterator()
             let maxConcurrent = 6
             var inFlight = 0
 
-            while inFlight < maxConcurrent, let id = iterator.next() {
+            while inFlight < maxConcurrent, let entry = iterator.next() {
                 inFlight += 1
                 group.addTask {
-                    (id, await Self.songIsDead(id: id, requestContext: requestContext))
+                    let outcome = await Self.reconcileOne(entry: entry, requestContext: requestContext)
+                    return (entry, outcome)
                 }
             }
 
-            for await (id, isDead) in group {
-                if isDead { dead.append(id) }
+            for await (entry, outcome) in group {
+                checked += 1
+                await progress?(checked, entries.count)
+                switch outcome {
+                case .refreshed(let title, let artist, let album):
+                    await PlayLogService.shared.updateMetadata(
+                        serverId: serverId, songId: entry.songId, title: title, artist: artist, album: album
+                    )
+                    refreshed += 1
+                case .repaired(let newSongId, let title, let artist, let album):
+                    await PlayLogService.shared.repairSongId(
+                        serverId: serverId, oldSongId: entry.songId, newSongId: newSongId,
+                        title: title, artist: artist, album: album
+                    )
+                    repaired += 1
+                case .delete:
+                    toDelete.append(entry.songId)
+                case .skip:
+                    break
+                }
                 if let next = iterator.next() {
+                    inFlight += 1
                     group.addTask {
-                        (next, await Self.songIsDead(id: next, requestContext: requestContext))
+                        let outcome = await Self.reconcileOne(entry: next, requestContext: requestContext)
+                        return (next, outcome)
                     }
                 }
             }
         }
 
-        guard !dead.isEmpty else { return (ids.count, 0, 0) }
-
-        let cleanup = await removeDeadPlayLogEntries(songIds: dead, serverId: serverId)
-        return (ids.count, cleanup.removedRows, cleanup.deletedCloudEvents)
+        guard !toDelete.isEmpty else {
+            return PlayLogReconciliationSummary(
+                checked: checked, refreshed: refreshed, repaired: repaired,
+                deletedSongs: 0, removedRows: 0, deletedCloudEvents: 0
+            )
+        }
+        let cleanup = await removeDeadPlayLogEntries(songIds: toDelete, serverId: serverId)
+        return PlayLogReconciliationSummary(
+            checked: checked, refreshed: refreshed, repaired: repaired, deletedSongs: toDelete.count,
+            removedRows: cleanup.removedRows, deletedCloudEvents: cleanup.deletedCloudEvents
+        )
     }
 
     func removeDeadPlayLogEntries(
@@ -1974,18 +2033,35 @@ actor CloudKitSyncService {
         return (removed, uuids.count)
     }
 
-    private nonisolated static func songIsDead(
-        id: String,
+    private nonisolated static func reconcileOne(
+        entry: PlayLogSongEntry,
         requestContext: SubsonicServerRequestContext
-    ) async -> Bool {
-        do {
-            _ = try await SubsonicAPIService.shared.getSong(id: id, context: requestContext)
-            return false
-        } catch SubsonicAPIError.apiError(let code, let message) {
-            return RecapSyncLogic.isDefinitiveNotFound(code: code, message: message)
-        } catch {
-            return false
-        }
+    ) async -> PlayLogReconciliationOutcome {
+        await PlayLogReconciliationLogic.reconcile(
+            songId: entry.songId,
+            storedTitle: entry.title,
+            storedArtist: entry.artist,
+            storedAlbum: entry.album,
+            lookupById: { id in
+                do {
+                    let song = try await SubsonicAPIService.shared.getSong(id: id, context: requestContext)
+                    return .found(title: song.title, artist: song.artist, album: song.album)
+                } catch SubsonicAPIError.apiError(let code, let message) {
+                    return RecapSyncLogic.isDefinitiveNotFound(code: code, message: message)
+                        ? .definitelyNotFound : .otherError
+                } catch {
+                    return .otherError
+                }
+            },
+            searchCandidates: { query in
+                guard let result = try? await SubsonicAPIService.shared.search(query: query, context: requestContext) else {
+                    return []
+                }
+                return (result.song ?? []).map {
+                    PlayLogSearchCandidate(songId: $0.id, title: $0.title, artist: $0.artist, album: $0.album)
+                }
+            }
+        )
     }
 
     private func resolvedServerRequestContext() async -> SubsonicServerRequestContext? {

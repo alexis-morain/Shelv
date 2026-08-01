@@ -120,6 +120,19 @@ struct Shelv_TVApp: App {
                             print("[ServerID] Backfill FAILED \(server.displayName): \(error)")
                         }
                     }
+                    // Re-check the active server's stableId even if already known — a server-side
+                    // id migration (e.g. Navidrome) can rotate it without any local trigger.
+                    if let active = serverStore.activeServer, active.remoteUserId != nil,
+                       let pw = await serverStore.loadPassword(for: active) {
+                        if let uid = try? await SubsonicAPIService.shared.validatedStableId(
+                            server: active,
+                            password: pw
+                        ), uid != active.remoteUserId {
+                            var updated = active
+                            updated.remoteUserId = uid
+                            _ = await serverStore.update(server: updated, password: nil)
+                        }
+                    }
                     await CloudKitSyncService.shared.setup()
                     // Beim Kaltstart deterministisch einmal synchronisieren — setup() allein lädt
                     // keine Remote-Plays; erst syncNow() ruft downloadChanges() und holt die Historie.

@@ -30,8 +30,21 @@ struct RecapPlayLogView: View {
                     ForEach(logs, id: \.uuid) { log in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
+                                if let title = log.songTitle, !title.isEmpty {
+                                    Text(title)
+                                        .font(.caption).lineLimit(1)
+                                    let subtitle = [log.artistName, log.albumName].compactMap { $0 }.joined(separator: " · ")
+                                    if !subtitle.isEmpty {
+                                        Text(subtitle)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
                                 Text(log.songId)
-                                    .font(.caption.monospaced()).lineLimit(1)
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.tertiary)
+                                    .lineLimit(1)
                                 HStack {
                                     Text(Self.dateFmt.string(from: Date(timeIntervalSince1970: log.playedAt)))
                                         .font(.caption2).foregroundStyle(.secondary)

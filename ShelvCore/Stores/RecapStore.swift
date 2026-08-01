@@ -459,15 +459,14 @@ class RecapStore: ObservableObject {
 
     // MARK: - Diff Computation
 
-    private nonisolated struct RecapDiffScan: Sendable {
-        let diffs: [RecapDiff]
-        let deadSongIds: Set<String>
-    }
-
     private nonisolated struct SongResolution: Sendable {
         let song: Song
         let isDead: Bool
     }
+
+    /// Extra Kandidaten über das eigentliche Playlist-Limit hinaus, aus denen ein toter
+    /// Top-Song im Speicher ersetzt werden kann, ohne die Datenbank anzufassen.
+    private static let recapBackfillBuffer = 15
 
     func computeDiffs(
         serverId: String,
@@ -476,42 +475,31 @@ class RecapStore: ObservableObject {
         isGenerating = true
         defer { isGenerating = false }
 
-        return try await RecapSyncLogic.stabilized(
-            scan: {
-                let scanTask = Task.detached(priority: .utility) {
-                    try await Self.scanDiffs(
-                        serverId: serverId,
-                        requestContext: requestContext
-                    )
-                }
-                let scan = try await withTaskCancellationHandler {
-                    try await scanTask.value
-                } onCancel: {
-                    scanTask.cancel()
-                }
-                return (scan.diffs, scan.deadSongIds)
-            },
-            removeDeadSongIds: { songIds in
-                let cleanup = await CloudKitSyncService.shared.removeDeadPlayLogEntries(
-                    songIds: songIds,
-                    serverId: serverId
-                )
-                return cleanup.removedRows
-            }
-        )
+        let scanTask = Task.detached(priority: .utility) {
+            try await Self.scanDiffs(serverId: serverId, requestContext: requestContext)
+        }
+        return try await withTaskCancellationHandler {
+            try await scanTask.value
+        } onCancel: {
+            scanTask.cancel()
+        }
     }
 
     /// Runs from an explicitly detached utility task so the set, dictionary and
     /// diff construction between network waits can never inherit MainActor.
+    ///
+    /// Tote Top-Songs (ID löst nicht mehr auf, z.B. nach einer Server-seitigen ID-Migration)
+    /// werden nur im Speicher übersprungen und durch den nächstplatzierten noch lebenden
+    /// Kandidaten ersetzt — die play_log-Datenbank wird von diesem Task nie verändert. Die
+    /// eigentliche Reparatur/Löschung passiert ausschließlich im manuellen Database-Cleanup.
     private nonisolated static func scanDiffs(
         serverId: String,
         requestContext: SubsonicServerRequestContext?
-    ) async throws -> RecapDiffScan {
+    ) async throws -> [RecapDiff] {
 
         let api = SubsonicAPIService.shared
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         var diffs: [RecapDiff] = []
-        var deadSongIds: Set<String> = []
 
         for entry in entries {
             guard let type = RecapPeriod.PeriodType(rawValue: entry.periodType) else { continue }
@@ -519,9 +507,12 @@ class RecapStore: ObservableObject {
             let periodEnd   = Date(timeIntervalSince1970: entry.periodEnd)
             let period = RecapPeriod(type: type, start: periodStart, end: periodEnd)
 
-            let expectedIds = await PlayLogService.shared.topSongs(
-                serverId: serverId, from: periodStart, to: periodEnd, limit: type.songLimit
+            let candidatePool = await PlayLogService.shared.topSongs(
+                serverId: serverId, from: periodStart, to: periodEnd,
+                limit: type.songLimit + Self.recapBackfillBuffer
             ).map(\.songId)
+            let initialExpectedIds = Array(candidatePool.prefix(type.songLimit))
+            let backupIds = Array(candidatePool.dropFirst(type.songLimit))
 
             let current: Playlist?
             try Task.checkCancellation()
@@ -541,13 +532,18 @@ class RecapStore: ObservableObject {
             }
 
             guard let current else {
-                guard !expectedIds.isEmpty else { continue }
-                var expectedSongs: [Song] = []
-                for id in expectedIds {
-                    let resolution = try await resolveSong(id: id, requestContext: requestContext)
-                    expectedSongs.append(resolution.song)
-                    if resolution.isDead { deadSongIds.insert(id) }
-                }
+                guard !initialExpectedIds.isEmpty else { continue }
+                let resolution = try await RecapExpectedSongsLogic.resolveExpectedIds(
+                    initial: initialExpectedIds,
+                    backups: backupIds,
+                    alreadyKnownAlive: { _ in false },
+                    resolve: { id in
+                        let r = try await resolveSong(id: id, requestContext: requestContext)
+                        return r.isDead ? nil : r.song
+                    }
+                )
+                let expectedSongs = resolution.finalIds.compactMap { resolution.resolvedItems[$0] }
+                guard !expectedSongs.isEmpty else { continue }
                 diffs.append(RecapDiff(
                     entry: entry,
                     playlistName: period.playlistName,
@@ -572,30 +568,39 @@ class RecapStore: ObservableObject {
 
             let nameMismatch    = currentName != period.playlistName
             let commentMissing  = (currentComment ?? "") != "Shelv Recap"
-            let contentMismatch = currentIds != expectedIds
+            let contentMismatch = currentIds != initialExpectedIds
 
             guard contentMismatch || nameMismatch || commentMissing else { continue }
 
-            let currentIdSet  = Set(currentIds)
-            let expectedIdSet = Set(expectedIds)
-            let missingIds    = expectedIds.filter { !currentIdSet.contains($0) }
-            let extraIds      = currentIds.filter { !expectedIdSet.contains($0) }
-
-            var missingSongs: [Song] = []
-            for id in missingIds {
-                let resolution = try await resolveSong(id: id, requestContext: requestContext)
-                missingSongs.append(resolution.song)
-                if resolution.isDead { deadSongIds.insert(id) }
-            }
-
-            let extraSongs = currentSongs.filter { !expectedIdSet.contains($0.id) }
-
+            let currentIdSet = Set(currentIds)
             var idToSong: [String: Song] = [:]
             for song in currentSongs { idToSong[song.id] = song }
-            for song in missingSongs { idToSong[song.id] = song }
-            let expectedOrder = expectedIds.compactMap { idToSong[$0] }
 
-            let orderChanged = missingIds.isEmpty && extraIds.isEmpty && contentMismatch
+            // Songs, die schon in der aktuellen Server-Playlist stehen, sind per Definition
+            // noch da — nur die restlichen (noch nicht dort vorhandenen) werden aufgelöst, damit
+            // ein toter Top-Song hier auffällt, ohne für den unveränderten Regelfall jedes Mal
+            // jede erwartete ID einzeln beim Server nachzufragen.
+            let resolution = try await RecapExpectedSongsLogic.resolveExpectedIds(
+                initial: initialExpectedIds,
+                backups: backupIds,
+                alreadyKnownAlive: { currentIdSet.contains($0) },
+                resolve: { id in
+                    let r = try await resolveSong(id: id, requestContext: requestContext)
+                    return r.isDead ? nil : r.song
+                }
+            )
+            let finalExpectedIds = resolution.finalIds
+            for (id, song) in resolution.resolvedItems { idToSong[id] = song }
+            let missingSongs = finalExpectedIds
+                .filter { !currentIdSet.contains($0) }
+                .compactMap { idToSong[$0] }
+
+            let expectedIdSet = Set(finalExpectedIds)
+            let missingIds    = finalExpectedIds.filter { !currentIdSet.contains($0) }
+            let extraIds      = currentIds.filter { !expectedIdSet.contains($0) }
+            let extraSongs    = currentSongs.filter { !expectedIdSet.contains($0.id) }
+            let expectedOrder = finalExpectedIds.compactMap { idToSong[$0] }
+            let orderChanged  = missingIds.isEmpty && extraIds.isEmpty && (currentIds != finalExpectedIds)
 
             let diff = RecapDiff(
                 entry: entry,
@@ -615,7 +620,7 @@ class RecapStore: ObservableObject {
             if diff.hasAnyDiff { diffs.append(diff) }
         }
 
-        return RecapDiffScan(diffs: diffs, deadSongIds: deadSongIds)
+        return diffs
     }
 
     private nonisolated static func resolveSong(

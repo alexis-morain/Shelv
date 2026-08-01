@@ -75,6 +75,18 @@ struct Shelv_DesktopApp: App {
                             print("[ServerID] Backfill FAILED \(server.displayName): \(error)")
                         }
                     }
+                    // Re-check the active server's stableId even if already known — a server-side
+                    // id migration (e.g. Navidrome) can rotate it without any local trigger.
+                    if let active = serverStore.activeServer, active.remoteUserId != nil,
+                       let pw = await serverStore.loadPassword(for: active) {
+                        if let uid = try? await api.validatedStableId(server: active, password: pw),
+                           uid != active.remoteUserId {
+                            var updated = active
+                            updated.remoteUserId = uid
+                            _ = await serverStore.update(server: updated, password: nil)
+                            print("[ServerID] Rotation detected for \(active.displayName): \(uid)")
+                        }
+                    }
                     if let active = serverStore.activeServer {
                         print("[ServerID] Active server stableId: \(active.stableId)")
                     }
