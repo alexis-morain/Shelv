@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct DatabaseSettingsView: View {
+    @EnvironmentObject var serverStore: ServerStore
     @ObservedObject private var syncStatus = CloudKitSyncService.shared.status
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
 
@@ -18,6 +19,11 @@ struct DatabaseSettingsView: View {
             }
 
             Section(String(localized: "logs")) {
+                if let sid = serverStore.activeServer?.stableId, !sid.isEmpty {
+                    NavigationLink(String(localized: "recent_plays")) {
+                        RecapPlayLogView(serverId: sid)
+                    }
+                }
                 NavigationLink(String(localized: "database_errors")) {
                     DatabaseErrorLogView()
                 }

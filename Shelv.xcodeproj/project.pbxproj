@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		A6370E2FCC02E636B1CE06BB /* ShelvCore/Services/PlayLogReconciliationLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */; };
-		BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */; };
 		BC10000C2FFE000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC10000D2FFE000000000001 /* GRDB */; };
 		BC1001012FFE000000000001 /* ShelvCore/Models/Album.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */; };
 		BC1001022FFE000000000001 /* ShelvCore/Models/Artist.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */; };
@@ -49,9 +48,11 @@
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
+		BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
 		BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Artist.swift; sourceTree = "<group>"; };
@@ -94,6 +95,7 @@
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
 		D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapExpectedSongsLogic.swift; sourceTree = "<group>"; };
+		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */

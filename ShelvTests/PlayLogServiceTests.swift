@@ -133,6 +133,31 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertEqual(logs.first?.albumName, "Album")
     }
 
+    /// Regressionstest: ein Gerät repariert eine tote ID (repairSongId, gleiche UUID, neue
+    /// songId) und re-uploaded. Ein zweites Gerät, das die UUID schon mit der alten ID kennt,
+    /// muss die neue ID übernehmen, nicht nur die Metadaten.
+    func testInsertIfNotExistsAdoptsARepairedSongIdForAnAlreadyKnownRow() async throws {
+        let service = try await makeService()
+        let now = Date(timeIntervalSince1970: 1_750_000_000).timeIntervalSince1970
+
+        let firstInsert = await service.insertIfNotExists(
+            uuid: "remote-play-1", songId: "old-dead-id", serverId: "server-a",
+            playedAt: now, songDuration: 200
+        )
+        XCTAssertTrue(firstInsert)
+
+        let repairArrives = await service.insertIfNotExists(
+            uuid: "remote-play-1", songId: "new-repaired-id", serverId: "server-a",
+            playedAt: now, songDuration: 200,
+            songTitle: "Title", artistName: "Artist", albumName: "Album"
+        )
+        XCTAssertTrue(repairArrives)
+
+        let logs = await service.allPlayLogs(serverId: "server-a")
+        XCTAssertEqual(logs.first?.songId, "new-repaired-id")
+        XCTAssertEqual(logs.first?.songTitle, "Title")
+    }
+
     func testTopSongsUsesStableTieBreakers() async throws {
         let service = try await makeService()
         let start = Date(timeIntervalSince1970: 1_750_000_000)

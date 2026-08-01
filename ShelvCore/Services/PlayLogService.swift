@@ -438,6 +438,12 @@ actor PlayLogService {
                     setClauses.append("serverId = ?")
                     args.append(serverId)
                 }
+                // Eine andere Zeile kann per Reconciliation auf eine reparierte ID umgeschrieben
+                // worden sein (repairSongId) — das muss auch hier ankommen, nicht nur die Metadaten.
+                if existing.songId != songId {
+                    setClauses.append("songId = ?")
+                    args.append(songId)
+                }
                 // Ein nil vom Absender heißt "hat dazu (noch) nichts gesagt", nicht "ist leer" —
                 // ein fehlender Wert darf nie bereits vorhandene lokale Metadaten löschen.
                 if let songTitle, existing.songTitle != songTitle {
