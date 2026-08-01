@@ -699,11 +699,6 @@ struct SearchView: View {
                     .scrollIndicators(.hidden)
                 }
             }
-            // Erzwingt einen sauberen Neuaufbau (inkl. der angehefteten Suchleiste),
-            // sobald der Mini-Player erscheint/verschwindet — verhindert, dass die
-            // Suchleiste an der alten Position "hängen bleibt", wenn man von einer
-            // anderen Ansicht (z. B. Now Playing/AirPlay) zur Suche zurückkehrt,
-            // während sich der untere Sicherheitsbereich zwischenzeitlich geändert hat.
             .id(player.hasActivePlayback)
             .navigationTitle(String(localized: "search"))
             .modifier(SearchPresentationModifier(
