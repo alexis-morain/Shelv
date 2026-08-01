@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
 		BC10000C2FFE000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC10000D2FFE000000000001 /* GRDB */; };
 		BC1001012FFE000000000001 /* ShelvCore/Models/Album.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */; };
 		BC1001022FFE000000000001 /* ShelvCore/Models/Artist.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */; };
@@ -26,7 +27,6 @@
 		BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */; };
 		BC1001262FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */; };
 		BC1001282FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */; };
-		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
 		BC10012A2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */; };
 		BC10012C2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012D2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift */; };
 		BC10012E2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */; };
@@ -106,7 +106,6 @@
 		BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/InstantMixQueueBuilder.swift; sourceTree = "<group>"; };
 		BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/SubsonicServer.swift; sourceTree = "<group>"; };
 		BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift; sourceTree = "<group>"; };
-		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConnectivityDebugLog.swift; sourceTree = "<group>"; };
 		BC10012D2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/DownloadModels.swift; sourceTree = "<group>"; };
 		BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DownloadDatabase.swift; sourceTree = "<group>"; };
@@ -134,6 +133,7 @@
 		BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Shelv TV Siri Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
