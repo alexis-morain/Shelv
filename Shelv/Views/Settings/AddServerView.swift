@@ -229,6 +229,11 @@ struct AddServerView: View {
                     testSuccess = false
                     return
                 }
+                // Passive capability probe — a failure here shouldn't block saving the
+                // server itself, so it's silently ignored (leaves isAdmin unchanged).
+                if let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: updated, password: password) {
+                    updated.isAdmin = isAdmin
+                }
             }
             guard await serverStore.update(
                 server: updated,
@@ -254,6 +259,9 @@ struct AddServerView: View {
                 )
                 var server = tempServer
                 server.remoteUserId = uid
+                if let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: server, password: password) {
+                    server.isAdmin = isAdmin
+                }
                 guard await serverStore.add(server: server, password: password) else {
                     testResult = String(localized: "credential_storage_failed")
                     testSuccess = false

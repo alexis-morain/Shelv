@@ -363,6 +363,7 @@
 "cache_cleared" = "Cache cleared";
 "active" = "Active";
 "activate" = "Activate";
+"admin" = "Admin";
 "manage_server" = "Manage Server";
 "enable_downloads" = "Enable Downloads";
 "disable_downloads_2" = "Disable downloads?";
@@ -486,6 +487,7 @@
 "radio_stations" = "Radio Stations";
 "no_radio_stations" = "No Radio Stations";
 "add_a_radio_station_to_get_started" = "Add a radio station to get started.";
+"radio_station_admin_required" = "Only server admin accounts can create radio stations.";
 "new_radio_station" = "New Radio Station";
 "edit_radio_station" = "Edit Radio Station";
 "delete_radio_station" = "Delete Radio Station";
