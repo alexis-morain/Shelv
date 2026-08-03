@@ -171,6 +171,52 @@ private nonisolated struct CloudUICustomizationPayload: Codable, Sendable {
     let values: [String: PersonalizationCloudValue]
 }
 
+// MARK: - CloudKit call timeout
+
+/// CKDatabase operations have no built-in timeout and can hang indefinitely on networks
+/// where iCloud traffic is degraded or blocked (unlike our Subsonic HTTP calls, which set
+/// `requestTimeout`). This wraps any CloudKit call so a hang surfaces as a normal failure
+/// after `seconds` instead of blocking whatever awaits it forever. The underlying operation
+/// isn't cancelled — a wedged CKOperation isn't guaranteed to respond to cancellation — it's
+/// simply abandoned and its eventual result discarded via the resume guard.
+struct CKOperationTimeoutError: Error {}
+
+private actor CKTimeoutResumeGuard {
+    private var didResume = false
+    func tryResume() -> Bool {
+        guard !didResume else { return false }
+        didResume = true
+        return true
+    }
+}
+
+private func withCKTimeout<T: Sendable>(
+    seconds: TimeInterval = 15,
+    _ operation: @escaping @Sendable () async throws -> T
+) async throws -> T {
+    let resumeGuard = CKTimeoutResumeGuard()
+    return try await withCheckedThrowingContinuation { continuation in
+        Task {
+            do {
+                let value = try await operation()
+                if await resumeGuard.tryResume() {
+                    continuation.resume(returning: value)
+                }
+            } catch {
+                if await resumeGuard.tryResume() {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+        Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if await resumeGuard.tryResume() {
+                continuation.resume(throwing: CKOperationTimeoutError())
+            }
+        }
+    }
+}
+
 // MARK: - CloudKitSyncService
 
 actor CloudKitSyncService {
@@ -597,7 +643,7 @@ actor CloudKitSyncService {
         }
         do {
             debug("[CloudKitSync] Creating/saving zone \(zoneID.zoneName)...")
-            let saved = try await db.save(CKRecordZone(zoneID: zoneID))
+            let saved = try await withCKTimeout { [db, zoneID] in try await db.save(CKRecordZone(zoneID: zoneID)) }
             debug("[CloudKitSync] Zone save returned: \(saved.zoneID)")
             isZoneReady = true
         } catch {
@@ -657,10 +703,12 @@ actor CloudKitSyncService {
                 guard !records.isEmpty else { return totalUploaded }
 
                 debug("[CloudKitSync] Sending modifyRecords with \(records.count) records...")
-                let saveResults = try await db.modifyRecords(
-                    saving: records, deleting: [],
-                    savePolicy: .allKeys, atomically: false
-                ).saveResults
+                let saveResults = try await withCKTimeout { [db] in
+                    try await db.modifyRecords(
+                        saving: records, deleting: [],
+                        savePolicy: .allKeys, atomically: false
+                    ).saveResults
+                }
 
                 var uploaded: [String] = []
                 var failureCount = 0
@@ -733,7 +781,9 @@ actor CloudKitSyncService {
             let token = changeToken(for: category)
             let hasToken = token != nil
             debug("[CloudKitSync] Fetching \(category.displayName) changes with token: \(hasToken ? "hasToken" : "noToken")")
-            let (records, deletions, newToken) = try await fetchZoneChanges(previousToken: token)
+            let (records, deletions, newToken) = try await withCKTimeout(seconds: 30) { [self] in
+                try await self.fetchZoneChanges(previousToken: token)
+            }
             debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions for \(category.displayName)")
 
             // Deletionen zuerst: verhindert, dass ein Add mit gleichem recordName
@@ -1004,7 +1054,7 @@ actor CloudKitSyncService {
         log("Syncing…")
 
         do {
-            _ = try await db.save(record)
+            _ = try await withCKTimeout { [db] in try await db.save(record) }
             await PlayLogService.shared.updateRegistryCKRecordName(
                 playlistId: entry.playlistId, ckRecordName: recordName
             )
@@ -1034,7 +1084,8 @@ actor CloudKitSyncService {
         }
         let recordName = makeRecapMarkerRecordName(serverId: serverId, periodKey: periodKey, isTest: isTest)
         let rid = CKRecord.ID(recordName: recordName, zoneID: zoneID)
-        guard let record = try? await db.record(for: rid) else { return nil }
+        let fetched = try? await withCKTimeout(seconds: 10) { [db] in try await db.record(for: rid) }
+        guard let record = fetched else { return nil }
         guard
             let playlistId  = record["playlistId"]  as? String,
             let serverId    = record["serverId"]     as? String,
@@ -1059,7 +1110,7 @@ actor CloudKitSyncService {
         log("Syncing…")
         let rid = CKRecord.ID(recordName: ckRecordName, zoneID: zoneID)
         do {
-            _ = try await db.modifyRecords(saving: [], deleting: [rid])
+            _ = try await withCKTimeout { [db] in try await db.modifyRecords(saving: [], deleting: [rid]) }
             await MainActor.run {
                 status.lastSyncDate = Date()
                 status.isSyncing = false
@@ -1111,11 +1162,13 @@ actor CloudKitSyncService {
             let names = Array(queue[start..<min(start + 400, queue.count)])
             let ids = names.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
             do {
-                let (_, deleteResults) = try await db.modifyRecords(
-                    saving: [],
-                    deleting: ids,
-                    atomically: false
-                )
+                let (_, deleteResults) = try await withCKTimeout { [db] in
+                    try await db.modifyRecords(
+                        saving: [],
+                        deleting: ids,
+                        atomically: false
+                    )
+                }
                 var dispositions: [String: PendingDeletionDisposition] = [:]
                 for (name, id) in zip(names, ids) {
                     guard let result = deleteResults[id] else {
@@ -1184,7 +1237,9 @@ actor CloudKitSyncService {
         for name in queue {
             let rid = CKRecord.ID(recordName: name, zoneID: zoneID)
             do {
-                let (_, deleteResults) = try await db.modifyRecords(saving: [], deleting: [rid])
+                let (_, deleteResults) = try await withCKTimeout { [db] in
+                    try await db.modifyRecords(saving: [], deleting: [rid])
+                }
                 if case .failure(let err) = deleteResults[rid] ?? .success(()), !Self.isGoneError(err) {
                     log("Marker deletion failed — will retry on next sync: \(err.localizedDescription)", isError: true)
                     continue
@@ -1227,6 +1282,7 @@ actor CloudKitSyncService {
             logDisabled(.recap, action: "retention upload")
             return
         }
+        guard await status.accountAvailable else { return }
         let updatedAt = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
         let syncedAt  = UserDefaults.standard.double(forKey: retentionSyncedAtKey)
         guard updatedAt > syncedAt else { return }
@@ -1243,7 +1299,9 @@ actor CloudKitSyncService {
             rec["yearlyRetention"]  = Int64(y)
             rec["updatedAt"]        = updatedAt
             // Singleton, Last-write-wins → Server-Konflikt bewusst überschreiben.
-            _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            _ = try await withCKTimeout { [db] in
+                try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            }
             Self.setUserDefault(.double(updatedAt), forKey: retentionSyncedAtKey)
             log("Retention settings uploaded")
         } catch {
@@ -1290,6 +1348,7 @@ actor CloudKitSyncService {
             logDisabled(.lyricsServer, action: "lyrics server settings upload")
             return
         }
+        guard await status.accountAvailable else { return }
         var updatedAt = UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey)
         let syncedAt = UserDefaults.standard.double(forKey: lyricsServerSyncedAtKey)
         let useCustom = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
@@ -1310,7 +1369,9 @@ actor CloudKitSyncService {
             rec["customBaseURL"] = customURL
             rec["onlineFallbackEnabled"] = onlineFallback ? 1 : 0
             rec["updatedAt"] = updatedAt
-            _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            _ = try await withCKTimeout { [db] in
+                try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            }
             Self.setUserDefault(.double(updatedAt), forKey: lyricsServerSyncedAtKey)
             log("Lyrics server settings uploaded")
         } catch {
@@ -1366,6 +1427,7 @@ actor CloudKitSyncService {
             logDisabled(.uiCustomizations, action: "UI customizations upload")
             return
         }
+        guard await status.accountAvailable else { return }
 
         var updatedAt = UserDefaults.standard.double(forKey: uiCustomizationsUpdatedAtKey)
         let syncedAt = UserDefaults.standard.double(forKey: uiCustomizationsSyncedAtKey)
@@ -1390,7 +1452,9 @@ actor CloudKitSyncService {
             rec["payload"] = payload as CKRecordValue
             rec["updatedAt"] = updatedAt
             rec["deviceId"] = deviceId
-            _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            _ = try await withCKTimeout { [db] in
+                try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            }
             Self.setUserDefault(.double(updatedAt), forKey: uiCustomizationsSyncedAtKey)
             log("UI customizations uploaded")
         } catch {
@@ -1443,7 +1507,7 @@ actor CloudKitSyncService {
         await MainActor.run { status.isSyncing = true }
         log("Deleting iCloud zone…")
         do {
-            _ = try await db.deleteRecordZone(withID: zoneID)
+            _ = try await withCKTimeout { [db, zoneID] in try await db.deleteRecordZone(withID: zoneID) }
             isZoneReady = false
             clearChangeTokens()
             clearPendingPlayEventDeletions()
@@ -1504,7 +1568,7 @@ actor CloudKitSyncService {
         await MainActor.run { status.isSyncing = true }
         log("Syncing…")
         do {
-            _ = try await db.modifyRecords(saving: [], deleting: ids)
+            _ = try await withCKTimeout { [db] in try await db.modifyRecords(saving: [], deleting: ids) }
             await MainActor.run {
                 status.lastSyncDate = Date()
                 status.isSyncing = false
@@ -1551,12 +1615,14 @@ actor CloudKitSyncService {
             record["changedAt"] = changedAt
             record["signature"] = signature
             // Singleton pro Server, last-write-wins → Server-Konflikt bewusst überschreiben.
-            let saveResults = try await db.modifyRecords(
-                saving: [record],
-                deleting: [],
-                savePolicy: .allKeys,
-                atomically: true
-            ).saveResults
+            let saveResults = try await withCKTimeout { [db] in
+                try await db.modifyRecords(
+                    saving: [record],
+                    deleting: [],
+                    savePolicy: .allKeys,
+                    atomically: true
+                ).saveResults
+            }
             guard let result = saveResults[record.recordID] else {
                 debug("[CloudKitSync] PlayQueue save returned no record result")
                 return false
@@ -1579,7 +1645,8 @@ actor CloudKitSyncService {
         guard await status.accountAvailable else { return nil }
         do {
             try await ensureZoneExists()
-            let record = try await db.record(for: playQueueRecordID(serverId: serverId))
+            let recordID = playQueueRecordID(serverId: serverId)
+            let record = try await withCKTimeout(seconds: 10) { [db] in try await db.record(for: recordID) }
             return record["payload"] as? Data
         } catch {
             // unknownItem = kein Record vorhanden → kein Fehler, einfach nil.
@@ -1610,7 +1677,8 @@ actor CloudKitSyncService {
         var result: [RadioStationMetadata] = []
         for name in Set(recordNames) {
             do {
-                let record = try await db.record(for: radioMetadataRecordID(recordName: name))
+                let recordID = radioMetadataRecordID(recordName: name)
+                let record = try await withCKTimeout(seconds: 10) { [db] in try await db.record(for: recordID) }
                 if let metadata = Self.radioMetadata(from: record) {
                     result.append(metadata)
                 }
@@ -1634,7 +1702,9 @@ actor CloudKitSyncService {
             record["azuraCastAPIURL"] = metadata.azuraCastAPIURL
             record["showSongCover"] = metadata.showSongCover ? 1 : 0
             record["updatedAt"] = metadata.updatedAt
-            _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+            _ = try await withCKTimeout { [db] in
+                try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+            }
             debug("[CloudKitSync] Radio metadata uploaded")
         } catch {
             debug("[CloudKitSync] Radio metadata upload failed: \(error.localizedDescription)")
@@ -1646,7 +1716,8 @@ actor CloudKitSyncService {
         guard await status.accountAvailable else { return }
         do {
             try await ensureZoneExists()
-            _ = try await db.deleteRecord(withID: radioMetadataRecordID(recordName: recordName))
+            let recordID = radioMetadataRecordID(recordName: recordName)
+            _ = try await withCKTimeout { [db] in try await db.deleteRecord(withID: recordID) }
             debug("[CloudKitSync] Radio metadata deleted")
         } catch {
             if !Self.isGoneError(error) {

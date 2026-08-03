@@ -321,7 +321,7 @@ final class RadioStationStore: ObservableObject {
                 configurationID: operationConfigurationID,
                 metadataServerID: operationMetadataServerID
             ) else { return true }
-            await refresh()
+            await refresh(waitForCloudMetadata: false)
             guard matchesCurrentServerContext(
                 configurationID: operationConfigurationID,
                 metadataServerID: operationMetadataServerID
@@ -367,47 +367,78 @@ final class RadioStationStore: ObservableObject {
             || item.metadata.serverId == operationMetadataServerID else { return false }
         do {
             let normalized = try validate(name: name, streamURL: streamURL)
-            try await api.updateInternetRadioStation(
-                id: item.station.id,
-                name: normalized.name,
-                streamURL: normalized.streamURL
-            )
-            guard matchesCurrentServerContext(
-                configurationID: operationConfigurationID,
-                metadataServerID: operationMetadataServerID
-            ) else { return true }
-            var metadata = RadioStationMetadata(
-                recordName: item.metadata.recordName,
-                serverId: item.metadata.serverId,
-                stationId: item.station.id,
-                streamURLKey: RadioStationMetadata.normalizedStreamURL(normalized.streamURL),
-                useAzuraCastAPI: useAzuraCastAPI,
-                azuraCastAPIURL: azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines),
-                showSongCover: showSongCover,
-                updatedAt: Date().timeIntervalSince1970
-            )
-            if metadata.serverId.isEmpty, let serverId = activeServerId {
-                metadata = RadioStationMetadata(
-                    recordName: RadioStationMetadata.recordName(serverId: serverId, stationId: item.station.id, streamURL: normalized.streamURL),
-                    serverId: serverId,
+            let trimmedAPIURL = azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Streaming data (name/URL) is server state — it's the only part that requires
+            // an admin-only Subsonic call. AzuraCast config is local/iCloud state. Only doing
+            // the work each side actually needs means a non-admin editing just the AzuraCast
+            // fields never touches the (doomed-to-fail) server call at all.
+            let streamingChanged = normalized.name != item.name
+                || RadioStationMetadata.normalizedStreamURL(normalized.streamURL) != RadioStationMetadata.normalizedStreamURL(item.streamURL)
+            let azuraCastChanged = useAzuraCastAPI != item.metadata.useAzuraCastAPI
+                || trimmedAPIURL != item.metadata.azuraCastAPIURL
+                || showSongCover != item.metadata.showSongCover
+
+            guard streamingChanged || azuraCastChanged else {
+                errorMessage = nil
+                return true
+            }
+
+            if streamingChanged {
+                try await api.updateInternetRadioStation(
+                    id: item.station.id,
+                    name: normalized.name,
+                    streamURL: normalized.streamURL
+                )
+                guard matchesCurrentServerContext(
+                    configurationID: operationConfigurationID,
+                    metadataServerID: operationMetadataServerID
+                ) else { return true }
+            }
+
+            if azuraCastChanged {
+                var metadata = RadioStationMetadata(
+                    recordName: item.metadata.recordName,
+                    serverId: item.metadata.serverId,
                     stationId: item.station.id,
                     streamURLKey: RadioStationMetadata.normalizedStreamURL(normalized.streamURL),
-                    useAzuraCastAPI: metadata.useAzuraCastAPI,
-                    azuraCastAPIURL: metadata.azuraCastAPIURL,
-                    showSongCover: metadata.showSongCover,
-                    updatedAt: metadata.updatedAt
+                    useAzuraCastAPI: useAzuraCastAPI,
+                    azuraCastAPIURL: trimmedAPIURL,
+                    showSongCover: showSongCover,
+                    updatedAt: Date().timeIntervalSince1970
                 )
+                if metadata.serverId.isEmpty, let serverId = activeServerId {
+                    metadata = RadioStationMetadata(
+                        recordName: RadioStationMetadata.recordName(serverId: serverId, stationId: item.station.id, streamURL: normalized.streamURL),
+                        serverId: serverId,
+                        stationId: item.station.id,
+                        streamURLKey: RadioStationMetadata.normalizedStreamURL(normalized.streamURL),
+                        useAzuraCastAPI: metadata.useAzuraCastAPI,
+                        azuraCastAPIURL: metadata.azuraCastAPIURL,
+                        showSongCover: metadata.showSongCover,
+                        updatedAt: metadata.updatedAt
+                    )
+                }
+                await saveMetadata(metadata)
+                guard matchesCurrentServerContext(
+                    configurationID: operationConfigurationID,
+                    metadataServerID: operationMetadataServerID
+                ) else { return true }
+                await applyMetadata(metadata, to: item.id)
+                guard matchesCurrentServerContext(
+                    configurationID: operationConfigurationID,
+                    metadataServerID: operationMetadataServerID
+                ) else { return true }
             }
-            await saveMetadata(metadata)
-            guard matchesCurrentServerContext(
-                configurationID: operationConfigurationID,
-                metadataServerID: operationMetadataServerID
-            ) else { return true }
-            await refresh()
-            guard matchesCurrentServerContext(
-                configurationID: operationConfigurationID,
-                metadataServerID: operationMetadataServerID
-            ) else { return true }
+
+            if streamingChanged {
+                await refresh(waitForCloudMetadata: false)
+                guard matchesCurrentServerContext(
+                    configurationID: operationConfigurationID,
+                    metadataServerID: operationMetadataServerID
+                ) else { return true }
+            }
+
             errorMessage = nil
             return true
         } catch {
@@ -784,10 +815,15 @@ final class RadioStationStore: ObservableObject {
         if let cacheError = await RadioStationMetadataDiskCache.shared.upsert(metadata, at: url) {
             errorMessage = cacheError
         }
-        await RadioStationMetadataCloudWriter.shared.save(
-            metadata,
-            generation: cloudGeneration
-        )
+        // The CloudKit round trip is not part of what the user is waiting on when they
+        // tap Save — local persistence above already reflects the change. Push it in the
+        // background so a slow/unreachable iCloud never blocks the save sheet.
+        Task {
+            await RadioStationMetadataCloudWriter.shared.save(
+                metadata,
+                generation: cloudGeneration
+            )
+        }
     }
 
     private func deleteMetadata(_ metadata: RadioStationMetadata) async {

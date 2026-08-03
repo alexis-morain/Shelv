@@ -319,6 +319,15 @@ struct SettingsView: View {
                             .foregroundStyle(accentColor)
                             .clipShape(Capsule())
                     }
+                    if server.isAdmin {
+                        Text(String(localized: "admin"))
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.2))
+                            .foregroundStyle(Color.red)
+                            .clipShape(Capsule())
+                    }
                     if server.hasSecondaryURL {
                         Text(server.isUsingSecondaryURL
                              ? String(localized: "secondary_url")

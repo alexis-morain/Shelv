@@ -86,6 +86,7 @@ struct ContentView: View {
                     .environmentObject(serverStore)
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
+                    .presentationBackground(Color(uiColor: .systemBackground))
                     .tint(accentColor)
             }
             .sheet(item: Binding(

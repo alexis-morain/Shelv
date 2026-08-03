@@ -42,6 +42,8 @@ enum SubsonicAPIError: LocalizedError, ServerConnectivityErrorProviding {
                 }
             }
             return String(localized: "network_error_please_try_again")
+        case .apiError(50, _):
+            return String(localized: "radio_station_admin_required")
         case .apiError(_, let m):
             return m ?? String(localized: "server_returned_an_error")
         case .decodingError:
@@ -160,6 +162,16 @@ private nonisolated struct PingInfoBody: Decodable, Sendable {
     let type: String?
     let serverVersion: String?
     let error: StatusCheck.APIError?
+}
+
+private nonisolated struct GetUserBody: Decodable, Sendable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let user: UserInfo?
+
+    struct UserInfo: Decodable, Sendable {
+        let adminRole: Bool?
+    }
 }
 
 private nonisolated struct ScanStatusBody: Decodable, Sendable {
@@ -1181,6 +1193,36 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             serverKey: responseFormatServerKey(for: server)
         )
         return info
+    }
+
+    /// Whether the given credentials have admin rights on the server. Some operations
+    /// (creating/editing internet radio stations, among others) are admin-only on the
+    /// Subsonic API; a normal user gets a silent `.apiError(50, ...)` if they try.
+    /// Returns `true` on ambiguous responses (missing `adminRole`) — this is a passive
+    /// capability probe, not a security gate, so we fail open rather than locking a real
+    /// admin out because of a server that omits the field.
+    func getUserIsAdmin(server: SubsonicServer, password: String) async throws -> Bool {
+        #if DEBUG
+        if server.baseURL == DemoContent.serverBaseURL || server.activeBaseURL == DemoContent.serverBaseURL {
+            return true
+        }
+        #endif
+        let body = try await fetchDecoded(
+            Envelope<GetUserBody>.self,
+            for: server,
+            password: password,
+            path: "getUser",
+            extra: [URLQueryItem(name: "username", value: server.username)]
+        ).response
+        do {
+            try check(status: body.status, error: body.error)
+        } catch SubsonicAPIError.apiError(50, _) {
+            // The base Subsonic API restricts `getUser` itself to admins — being rejected
+            // here (even when asking about your own account) is itself proof of non-admin,
+            // not an ambiguous/unsupported response.
+            return false
+        }
+        return body.user?.adminRole ?? true
     }
 
     func startScan(server: SubsonicServer, password: String) async throws {

@@ -184,6 +184,11 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
     var activeURLSlot: ServerURLSlot
     var username: String
     var remoteUserId: String?
+    /// Whether this account has admin rights on the server (e.g. required to create/edit
+    /// internet radio stations). Defaults to `true` so a fresh install or a server that
+    /// doesn't support the admin-check never falsely locks out an actual admin — it's only
+    /// flipped to `false` on a positive, successful check.
+    var isAdmin: Bool = true
 
     var displayName: String {
         name.isEmpty ? baseURL : name
@@ -229,6 +234,7 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
         self.activeURLSlot = activeURLSlot
         self.username = username
         self.remoteUserId = nil
+        self.isAdmin = true
         sanitizeURLSlots()
     }
 
@@ -289,6 +295,7 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
         case activeURLSlot
         case username
         case remoteUserId
+        case isAdmin
     }
 
     init(from decoder: Decoder) throws {
@@ -300,6 +307,7 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
         activeURLSlot = try container.decodeIfPresent(ServerURLSlot.self, forKey: .activeURLSlot) ?? .primary
         username = try container.decode(String.self, forKey: .username)
         remoteUserId = try container.decodeIfPresent(String.self, forKey: .remoteUserId)
+        isAdmin = try container.decodeIfPresent(Bool.self, forKey: .isAdmin) ?? true
         sanitizeURLSlots()
     }
 }

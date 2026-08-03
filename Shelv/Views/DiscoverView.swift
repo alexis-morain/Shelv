@@ -273,18 +273,21 @@ struct DiscoverView: View {
                 InsightsView()
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
+                    .presentationBackground(Color(uiColor: .systemBackground))
                     .tint(accentColor)
             }
             .sheet(isPresented: $showRecap) {
                 RecapView()
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
+                    .presentationBackground(Color(uiColor: .systemBackground))
                     .tint(accentColor)
             }
             .sheet(isPresented: $showRadioSheet) {
                 RadioStationsView()
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
+                    .presentationBackground(Color(uiColor: .systemBackground))
                     .tint(accentColor)
             }
             .refreshable {

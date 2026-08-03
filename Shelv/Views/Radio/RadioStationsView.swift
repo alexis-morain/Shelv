@@ -13,6 +13,7 @@ struct RadioStationsView: View {
     @State private var toast: ShelveToast?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private var isAdmin: Bool { ServerStore.shared.activeServer?.isAdmin ?? true }
     private var sortDirection: SortDirection { SortDirection(rawValue: sortDirectionRaw) ?? .ascending }
     private var displayItems: [RadioStationDisplayItem] {
         sortDirection == .descending ? Array(store.items.reversed()) : store.items
@@ -28,14 +29,18 @@ struct RadioStationsView: View {
                     ContentUnavailableView {
                         Label(String(localized: "no_radio_stations"), systemImage: "dot.radiowaves.left.and.right")
                     } description: {
-                        Text(String(localized: "add_a_radio_station_to_get_started"))
+                        Text(isAdmin
+                             ? String(localized: "add_a_radio_station_to_get_started")
+                             : String(localized: "radio_station_admin_required"))
                     } actions: {
-                        Button {
-                            showAddStation = true
-                        } label: {
-                            Label(String(localized: "new_radio_station"), systemImage: "plus")
+                        if isAdmin {
+                            Button {
+                                showAddStation = true
+                            } label: {
+                                Label(String(localized: "new_radio_station"), systemImage: "plus")
+                            }
+                            .buttonStyle(.borderedProminent)
                         }
-                        .buttonStyle(.borderedProminent)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
@@ -57,10 +62,12 @@ struct RadioStationsView: View {
                     } label: {
                         Image(systemName: "arrow.up.arrow.down")
                     }
-                    Button {
-                        showAddStation = true
-                    } label: {
-                        Image(systemName: "plus")
+                    if isAdmin {
+                        Button {
+                            showAddStation = true
+                        } label: {
+                            Image(systemName: "plus")
+                        }
                     }
                 }
             }
@@ -347,9 +354,11 @@ private struct RadioStationEditorView: View {
     @State private var azuraCastAPIURL = ""
     @State private var showSongCover = true
     @State private var isSaving = false
+    @State private var saveError: String?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isEditing: Bool { item != nil }
+    private var isAdmin: Bool { ServerStore.shared.activeServer?.isAdmin ?? true }
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !streamURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -362,12 +371,20 @@ private struct RadioStationEditorView: View {
                 Section {
                     TextField(String(localized: "name"), text: $name)
                         .autocorrectionDisabled()
+                        .disabled(!isAdmin)
+                        .foregroundStyle(isAdmin ? .primary : .secondary)
                     TextField(String(localized: "streaming_link"), text: $streamURL)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
+                        .disabled(!isAdmin)
+                        .foregroundStyle(isAdmin ? .primary : .secondary)
                 } header: {
                     Text(String(localized: "stream_data"))
+                } footer: {
+                    if !isAdmin {
+                        Text(String(localized: "radio_station_admin_required"))
+                    }
                 }
 
                 Section {
@@ -408,6 +425,14 @@ private struct RadioStationEditorView: View {
                 }
             }
             .onAppear(perform: prefill)
+            .alert(
+                String(localized: "error"),
+                isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
+            ) {
+                Button(String(localized: "ok"), role: .cancel) {}
+            } message: {
+                Text(saveError ?? "")
+            }
         }
     }
 
@@ -443,7 +468,11 @@ private struct RadioStationEditorView: View {
                 )
             }
             isSaving = false
-            if ok { dismiss() }
+            if ok {
+                dismiss()
+            } else {
+                saveError = store.errorMessage ?? String(localized: "server_returned_an_error")
+            }
         }
     }
 }
