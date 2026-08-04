@@ -168,75 +168,6 @@ struct SearchView: View {
                     ContentUnavailableView.search(text: query)
                 } else {
                     List {
-                        if let songs = result?.song, !songs.isEmpty {
-                            Section(String(localized: "songs")) {
-                                ForEach(songs) { song in
-                                    Button {
-                                        player.playSong(song)
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 8)
-                                                .frame(width: 44, height: 44)
-                                                .overlay {
-                                                    NowPlayingOverlay(
-                                                        songId: song.id, size: 44,
-                                                        cornerRadius: 8, accentColor: accentColor
-                                                    )
-                                                }
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(song.title)
-                                                    .font(.body)
-                                                    .foregroundStyle(.primary)
-                                                if let artist = song.artist {
-                                                    Text(artist)
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
-                                                }
-                                            }
-                                            Spacer()
-                                            HStack(spacing: 4) {
-                                                SongFavoriteBadge(songId: song.id)
-                                                DownloadStatusIcon(songId: song.id)
-                                            }
-                                            Text(song.durationFormatted)
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
-                                                .monospacedDigit()
-                                        }
-                                        .contentShape(Rectangle())
-                                    }
-                                    .buttonStyle(.plain)
-                                    .personalizedSongSwipeActions(
-                                        song: song,
-                                        isOffline: offlineMode.isOffline,
-                                        isFavorite: libraryStore.isSongStarred(song),
-                                        accentColor: accentColor,
-                                        onPlay: {
-                                            player.playSong(song)
-                                        },
-                                        onFavorite: {
-                                            haptic(.medium)
-                                            Task { await libraryStore.toggleStarSong(song) }
-                                        },
-                                        onAddToPlaylist: {
-                                            playlistSongIds = [song.id]
-                                            showAddToPlaylist = true
-                                        },
-                                        onPlayNext: {
-                                            haptic()
-                                            player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: String(localized: "plays_next"))
-                                        },
-                                        onAddToQueue: {
-                                            haptic()
-                                            player.addToQueue(song)
-                                            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
                         if let artists = result?.artist.map({ $0.filter { ($0.albumCount ?? 0) > 0 } }), !artists.isEmpty {
                             Section(String(localized: "artists")) {
                                 ForEach(artists) { artist in
@@ -335,6 +266,75 @@ struct SearchView: View {
                                             }
                                         )
                                     }
+                                }
+                            }
+                        }
+
+                        if let songs = result?.song, !songs.isEmpty {
+                            Section(String(localized: "songs")) {
+                                ForEach(songs) { song in
+                                    Button {
+                                        player.playSong(song)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 8)
+                                                .frame(width: 44, height: 44)
+                                                .overlay {
+                                                    NowPlayingOverlay(
+                                                        songId: song.id, size: 44,
+                                                        cornerRadius: 8, accentColor: accentColor
+                                                    )
+                                                }
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(song.title)
+                                                    .font(.body)
+                                                    .foregroundStyle(.primary)
+                                                if let artist = song.artist {
+                                                    Text(artist)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            HStack(spacing: 4) {
+                                                SongFavoriteBadge(songId: song.id)
+                                                DownloadStatusIcon(songId: song.id)
+                                            }
+                                            Text(song.durationFormatted)
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                                .monospacedDigit()
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .personalizedSongSwipeActions(
+                                        song: song,
+                                        isOffline: offlineMode.isOffline,
+                                        isFavorite: libraryStore.isSongStarred(song),
+                                        accentColor: accentColor,
+                                        onPlay: {
+                                            player.playSong(song)
+                                        },
+                                        onFavorite: {
+                                            haptic(.medium)
+                                            Task { await libraryStore.toggleStarSong(song) }
+                                        },
+                                        onAddToPlaylist: {
+                                            playlistSongIds = [song.id]
+                                            showAddToPlaylist = true
+                                        },
+                                        onPlayNext: {
+                                            haptic()
+                                            player.addPlayNext(song)
+                                            currentToast = ShelveToast(message: String(localized: "plays_next"))
+                                        },
+                                        onAddToQueue: {
+                                            haptic()
+                                            player.addToQueue(song)
+                                            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
+                                        }
+                                    )
                                 }
                             }
                         }
