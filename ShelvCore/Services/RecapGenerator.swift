@@ -26,12 +26,20 @@ nonisolated struct RecapPeriod: Sendable {
             }
         }
 
-        var retentionKey: String {
+        private var retentionBaseKey: String {
             switch self {
             case .week:  return "recapWeeklyRetention"
             case .month: return "recapMonthlyRetention"
             case .year:  return "recapYearlyRetention"
             }
+        }
+
+        /// Retention is a personal preference tied to whose listening history it prunes,
+        /// not a device-wide setting — scoped per account (`serverId` = the account's
+        /// stableId) so a family sharing one server/device doesn't have one member's
+        /// retention choice silently pruning another member's recaps.
+        func retentionKey(serverId: String) -> String {
+            "\(retentionBaseKey).\(serverId)"
         }
 
         var defaultRetention: Int {
@@ -318,7 +326,7 @@ actor RecapGenerator {
 
     private func enforceRetention(periodType: RecapPeriod.PeriodType, serverId: String) async {
         let limit = await MainActor.run {
-            let raw = UserDefaults.standard.integer(forKey: periodType.retentionKey)
+            let raw = UserDefaults.standard.integer(forKey: periodType.retentionKey(serverId: serverId))
             return raw > 0 ? raw : periodType.defaultRetention
         }
 

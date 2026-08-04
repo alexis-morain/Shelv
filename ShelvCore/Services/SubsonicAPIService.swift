@@ -42,8 +42,6 @@ enum SubsonicAPIError: LocalizedError, ServerConnectivityErrorProviding {
                 }
             }
             return String(localized: "network_error_please_try_again")
-        case .apiError(50, _):
-            return String(localized: "radio_station_admin_required")
         case .apiError(_, let m):
             return m ?? String(localized: "server_returned_an_error")
         case .decodingError:

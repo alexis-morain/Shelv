@@ -153,6 +153,18 @@ class ServerStore: ObservableObject {
         UserDefaults.standard.set(server.id.uuidString, forKey: activeKey)
         await applyToAPIService(server: server)
         Task { await ScrobbleService.shared.flushPendingScrobbles() }
+        // Admin rights are per-account and can differ between servers, or change
+        // server-side between sessions — refresh once per activation so switching to a
+        // server we haven't checked recently (or ever) doesn't keep trusting a stale flag
+        // for the rest of the session. Passive probe: failure just leaves it unchanged.
+        Task { [weak self] in
+            guard let self, let password = await self.loadPassword(for: server) else { return }
+            guard let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: server, password: password),
+                  isAdmin != server.isAdmin else { return }
+            var updated = server
+            updated.isAdmin = isAdmin
+            _ = await self.update(server: updated, password: nil)
+        }
     }
 
     private func activateStoredServer() async {

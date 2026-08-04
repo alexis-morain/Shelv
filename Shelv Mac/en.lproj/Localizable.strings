@@ -579,6 +579,7 @@
 "hour_abbreviation" = "hr";
 "primary_url" = "Primary URL";
 "secondary_url" = "Secondary URL";
+"admin" = "Admin";
 "use_primary_url" = "Use Primary URL";
 "use_secondary_url" = "Use Secondary URL";
 "download_format" = "Download Format";

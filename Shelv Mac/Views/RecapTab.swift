@@ -9,9 +9,6 @@ struct RecapTab: View {
     @AppStorage("recapWeeklyEnabled")    private var recapWeeklyEnabled    = true
     @AppStorage("recapMonthlyEnabled")   private var recapMonthlyEnabled   = true
     @AppStorage("recapYearlyEnabled")    private var recapYearlyEnabled    = true
-    @AppStorage("recapWeeklyRetention")  private var recapWeeklyRetention  = 1
-    @AppStorage("recapMonthlyRetention") private var recapMonthlyRetention = 12
-    @AppStorage("recapYearlyRetention")  private var recapYearlyRetention  = 3
 
     @State private var showRegistry = false
     @State private var showRecapLog = false
@@ -27,6 +24,7 @@ struct RecapTab: View {
 
     private struct PendingRetentionChange: Identifiable {
         let id = UUID()
+        let serverId: String
         let type: RecapPeriod.PeriodType
         let newValue: Int
         let excess: Int
@@ -106,10 +104,14 @@ struct RecapTab: View {
         }
         .formStyle(.grouped)
         .padding()
-        .task {
-            weekRetentionDraft  = recapWeeklyRetention
-            monthRetentionDraft = recapMonthlyRetention
-            yearRetentionDraft  = recapYearlyRetention
+        // `id:` sorgt dafür, dass beim Account-Wechsel (z.B. über ein anderes Fenster,
+        // während dieses Settings-Fenster offen bleibt) die Drafts neu für den jetzt
+        // aktiven Account geladen werden, statt die Werte des vorigen Accounts zu zeigen.
+        .task(id: appState.serverStore.activeServer?.stableId) {
+            let sid = appState.serverStore.activeServer?.stableId
+            weekRetentionDraft  = storedRetention(for: .week, serverId: sid)
+            monthRetentionDraft = storedRetention(for: .month, serverId: sid)
+            yearRetentionDraft  = storedRetention(for: .year, serverId: sid)
         }
         .alert(
             pendingRetention.map {
@@ -122,19 +124,22 @@ struct RecapTab: View {
             presenting: pendingRetention
         ) { pending in
             Button(String(localized: "delete"), role: .destructive) {
-                guard let sid = appState.serverStore.activeServer?.stableId else { return }
+                // Bewusst der Account, der beim Anstoßen der Änderung aktiv war (`pending.serverId`),
+                // nicht `appState.serverStore.activeServer` neu abgefragt — sonst könnte ein
+                // Account-Wechsel während des `await` die Buchhaltung auf den falschen Account schreiben.
+                let sid = pending.serverId
                 let type = pending.type
                 let newValue = pending.newValue
                 Task {
                     await recapStore.applyRetention(
                         periodType: type, limit: newValue, serverId: sid
                     )
-                    setStoredRetention(type, newValue)
+                    setStoredRetention(type, newValue, serverId: sid)
                 }
                 pendingRetention = nil
             }
             Button(String(localized: "cancel"), role: .cancel) {
-                setDraft(pending.type, storedRetention(for: pending.type))
+                setDraft(pending.type, storedRetention(for: pending.type, serverId: pending.serverId))
                 pendingRetention = nil
             }
         } message: { _ in
@@ -190,21 +195,18 @@ struct RecapTab: View {
         .padding(.vertical, 4)
     }
 
-    private func storedRetention(for type: RecapPeriod.PeriodType) -> Int {
-        switch type {
-        case .week:  return recapWeeklyRetention
-        case .month: return recapMonthlyRetention
-        case .year:  return recapYearlyRetention
-        }
+    // Retention ist personenbezogen, deshalb pro Account (`stableId`) gescoped statt
+    // fixem `@AppStorage`-Key — siehe RecapSettingsView (iOS) für die ausführliche
+    // Begründung.
+    private func storedRetention(for type: RecapPeriod.PeriodType, serverId: String?) -> Int {
+        guard let serverId else { return type.defaultRetention }
+        let raw = UserDefaults.standard.integer(forKey: type.retentionKey(serverId: serverId))
+        return raw > 0 ? raw : type.defaultRetention
     }
 
-    private func setStoredRetention(_ type: RecapPeriod.PeriodType, _ value: Int) {
-        switch type {
-        case .week:  recapWeeklyRetention = value
-        case .month: recapMonthlyRetention = value
-        case .year:  recapYearlyRetention = value
-        }
-        Task { await CloudKitSyncService.shared.recordRetentionChange() }
+    private func setStoredRetention(_ type: RecapPeriod.PeriodType, _ value: Int, serverId: String) {
+        UserDefaults.standard.set(value, forKey: type.retentionKey(serverId: serverId))
+        Task { await CloudKitSyncService.shared.recordRetentionChange(serverId: serverId) }
     }
 
     private func setDraft(_ type: RecapPeriod.PeriodType, _ value: Int) {
@@ -216,14 +218,17 @@ struct RecapTab: View {
     }
 
     private func handleRetentionChange(type: RecapPeriod.PeriodType, newValue: Int) {
-        let current = storedRetention(for: type)
-        guard newValue != current else { return }
-        guard newValue < current else {
-            setStoredRetention(type, newValue)
+        // Account einmal jetzt einfangen und für den ganzen Vorgang (inkl. der async
+        // Bestätigung) verwenden — nicht erneut abfragen, sonst könnte ein Account-Wechsel
+        // währenddessen die Änderung am falschen Account landen lassen.
+        guard let sid = appState.serverStore.activeServer?.stableId else {
+            setDraft(type, storedRetention(for: type, serverId: nil))
             return
         }
-        guard let sid = appState.serverStore.activeServer?.stableId else {
-            setDraft(type, current)
+        let current = storedRetention(for: type, serverId: sid)
+        guard newValue != current else { return }
+        guard newValue < current else {
+            setStoredRetention(type, newValue, serverId: sid)
             return
         }
         Task {
@@ -231,9 +236,9 @@ struct RecapTab: View {
                 periodType: type, limit: newValue, serverId: sid
             )
             if excess > 0 {
-                pendingRetention = PendingRetentionChange(type: type, newValue: newValue, excess: excess)
+                pendingRetention = PendingRetentionChange(serverId: sid, type: type, newValue: newValue, excess: excess)
             } else {
-                setStoredRetention(type, newValue)
+                setStoredRetention(type, newValue, serverId: sid)
             }
         }
     }

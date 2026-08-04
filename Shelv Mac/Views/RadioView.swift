@@ -3,6 +3,7 @@ import SwiftUI
 struct RadioView: View {
     @ObservedObject private var store = RadioStationStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var serverStore = ServerStore.shared
     @Environment(\.themeColor) private var themeColor
     @AppStorage("radioViewIsGridMac") private var isGrid = false
     @AppStorage("radioSortDirectionMac") private var directionRaw = SortDirection.ascending.rawValue
@@ -12,6 +13,7 @@ struct RadioView: View {
     @State private var deleteItem: RadioStationDisplayItem?
     @State private var isEditingStations = false
 
+    private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var direction: SortDirection { SortDirection(rawValue: directionRaw) ?? .ascending }
     private var displayItems: [RadioStationDisplayItem] {
         direction == .descending ? Array(store.items.reversed()) : store.items
@@ -112,13 +114,15 @@ struct RadioView: View {
                 }
                 .help(isGrid ? String(localized: "list") : String(localized: "grid"))
 
-                Button {
-                    showAdd = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.title3)
+                if isAdmin {
+                    Button {
+                        showAdd = true
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.title3)
+                    }
+                    .help(String(localized: "new_radio_station"))
                 }
-                .help(String(localized: "new_radio_station"))
             }
         }
         .buttonStyle(.borderless)
@@ -346,6 +350,7 @@ private struct MacRadioStationEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var store = RadioStationStore.shared
+    @ObservedObject private var serverStore = ServerStore.shared
 
     @State private var name = ""
     @State private var streamURL = ""
@@ -353,7 +358,9 @@ private struct MacRadioStationEditorView: View {
     @State private var azuraCastAPIURL = ""
     @State private var showSongCover = true
     @State private var isSaving = false
+    @State private var saveError: String?
 
+    private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var isEditing: Bool { item != nil }
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -373,9 +380,17 @@ private struct MacRadioStationEditorView: View {
             Form {
                 Section {
                     TextField(String(localized: "name"), text: $name)
+                        .disabled(!isAdmin)
+                        .foregroundStyle(isAdmin ? .primary : .secondary)
                     TextField(String(localized: "streaming_link"), text: $streamURL)
+                        .disabled(!isAdmin)
+                        .foregroundStyle(isAdmin ? .primary : .secondary)
                 } header: {
                     Text(String(localized: "stream_data"))
+                } footer: {
+                    if !isAdmin {
+                        Text(String(localized: "radio_station_admin_required"))
+                    }
                 }
 
                 Section {
@@ -412,6 +427,14 @@ private struct MacRadioStationEditorView: View {
         }
         .frame(width: 520, height: useAzuraCastAPI ? 610 : 480)
         .onAppear(perform: prefill)
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
+        ) {
+            Button(String(localized: "ok"), role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
+        }
     }
 
     private func prefill() {
@@ -446,7 +469,11 @@ private struct MacRadioStationEditorView: View {
                 )
             }
             isSaving = false
-            if ok { dismiss() }
+            if ok {
+                dismiss()
+            } else {
+                saveError = store.errorMessage ?? String(localized: "server_returned_an_error")
+            }
         }
     }
 }

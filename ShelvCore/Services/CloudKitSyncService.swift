@@ -239,14 +239,24 @@ actor CloudKitSyncService {
     private let uiCustomizationsSyncEnabledKey = "iCloudSyncUICustomizationsEnabled"
     private let queueSyncModeKey = "queueSyncMode"
 
-    // Geteilte Recap-Retention (eine Wahrheit über alle Geräte, statt lokalem @AppStorage).
-    // Singleton-Record in der Zone; Last-write-wins per updatedAt-Zeitstempel.
-    private static let retentionRecordName = "recap_settings"
-    private static let weeklyKey  = "recapWeeklyRetention"
-    private static let monthlyKey = "recapMonthlyRetention"
-    private static let yearlyKey  = "recapYearlyRetention"
-    private let retentionUpdatedAtKey = "recap_retention_updated_at"
-    private let retentionSyncedAtKey  = "recap_retention_synced_at"
+    // Retention pro Account (eine Wahrheit über alle Geräte desselben Accounts, statt
+    // lokalem @AppStorage) — bewusst NICHT ein globaler Singleton: Retention entscheidet,
+    // wessen Recap-Playlists gelöscht werden, das ist personenbezogen wie die Recaps
+    // selbst, nicht geräteweit wie z.B. UI-Customizations.
+    private static let retentionRecordPrefix = "recap_settings."
+    private static func retentionRecordName(serverId: String) -> String {
+        retentionRecordPrefix + serverId
+    }
+    private static func serverId(fromRetentionRecordName name: String) -> String? {
+        guard name.hasPrefix(retentionRecordPrefix) else { return nil }
+        return String(name.dropFirst(retentionRecordPrefix.count))
+    }
+    private func retentionUpdatedAtKey(serverId: String) -> String {
+        "recap_retention_updated_at.\(serverId)"
+    }
+    private func retentionSyncedAtKey(serverId: String) -> String {
+        "recap_retention_synced_at.\(serverId)"
+    }
 
     private static let lyricsServerRecordName = "lyrics_server_settings"
     private static let lyricsUseCustomKey = "useCustomLrcLibServer"
@@ -602,7 +612,9 @@ actor CloudKitSyncService {
     @discardableResult
     func updateAccountStatus() async -> CKAccountStatus {
         do {
-            let s = try await container.accountStatus()
+            // This gates every sync entry point (syncNow, flushAndWait, category changes) —
+            // a hang here would defeat the whole point of timing out the calls it guards.
+            let s = try await withCKTimeout { [container] in try await container.accountStatus() }
             let available = s == .available
             await MainActor.run { status.accountAvailable = available }
             return s
@@ -821,7 +833,9 @@ actor CloudKitSyncService {
             stats.settingsDeleted = settingsDel
             // Retention-Settings: nach dem Einlesen lokalen Stand ggf. nachschieben.
             if category == .recap {
-                await pushRetentionIfNeeded()
+                if let serverId = await resolvedServerRequestContext()?.serverId {
+                    await pushRetentionIfNeeded(serverId: serverId)
+                }
             } else if category == .lyricsServer {
                 await pushLyricsServerSettingsIfNeeded()
             } else if category == .uiCustomizations {
@@ -850,7 +864,7 @@ actor CloudKitSyncService {
                 debug("[CloudKitSync] Download CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
             if isZoneNotFound(error) {
-                await markLocalAsUnsyncedForReUpload()
+                await markLocalAsUnsyncedForReUpload(serverId: await resolvedServerId())
                 setChangeToken(nil, for: category)
                 isZoneReady = false
                 log("iCloud zone was reset on another device — marking local \(category.displayName) data for re-upload")
@@ -858,7 +872,7 @@ actor CloudKitSyncService {
                 // Zone was wiped and recreated on another device (typical when that device
                 // re-enabled sync in the same flow). Treat like zoneNotFound so our local
                 // truth gets re-uploaded.
-                await markLocalAsUnsyncedForReUpload()
+                await markLocalAsUnsyncedForReUpload(serverId: await resolvedServerId())
                 setChangeToken(nil, for: category)
                 isZoneReady = false
                 log("Change token expired for \(category.displayName) — marking local data for re-upload")
@@ -1267,42 +1281,45 @@ actor CloudKitSyncService {
     /// Von der Settings-UI nach einer Retention-Änderung aufgerufen: lokalen Zeitstempel
     /// setzen und sofort hochzuladen versuchen. Schlägt der Upload fehl (offline/Sync aus),
     /// holt ihn der nächste `syncNow` über `pushRetentionIfNeeded` nach.
-    func recordRetentionChange() async {
-        Self.setUserDefault(.double(Date().timeIntervalSince1970), forKey: retentionUpdatedAtKey)
+    func recordRetentionChange(serverId: String) async {
+        Self.setUserDefault(.double(Date().timeIntervalSince1970), forKey: retentionUpdatedAtKey(serverId: serverId))
         guard canSync(.recap) else {
             logDisabled(.recap, action: "retention upload")
             return
         }
-        await pushRetentionIfNeeded()
+        await pushRetentionIfNeeded(serverId: serverId)
     }
 
     /// Lädt den lokalen Retention-Stand hoch, falls er neuer ist als der zuletzt gesyncte.
-    func pushRetentionIfNeeded() async {
+    func pushRetentionIfNeeded(serverId: String) async {
+        guard !serverId.isEmpty else { return }
         guard canSync(.recap) else {
             logDisabled(.recap, action: "retention upload")
             return
         }
         guard await status.accountAvailable else { return }
-        let updatedAt = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
-        let syncedAt  = UserDefaults.standard.double(forKey: retentionSyncedAtKey)
+        let updatedAtKey = retentionUpdatedAtKey(serverId: serverId)
+        let syncedAtKey = retentionSyncedAtKey(serverId: serverId)
+        let updatedAt = UserDefaults.standard.double(forKey: updatedAtKey)
+        let syncedAt  = UserDefaults.standard.double(forKey: syncedAtKey)
         guard updatedAt > syncedAt else { return }
 
-        let w = retentionValue(Self.weeklyKey, default: 1)
-        let m = retentionValue(Self.monthlyKey, default: 12)
-        let y = retentionValue(Self.yearlyKey, default: 3)
+        let w = retentionValue(RecapPeriod.PeriodType.week.retentionKey(serverId: serverId), default: 1)
+        let m = retentionValue(RecapPeriod.PeriodType.month.retentionKey(serverId: serverId), default: 12)
+        let y = retentionValue(RecapPeriod.PeriodType.year.retentionKey(serverId: serverId), default: 3)
         do {
             try await ensureZoneExists()
-            let rid = CKRecord.ID(recordName: Self.retentionRecordName, zoneID: zoneID)
+            let rid = CKRecord.ID(recordName: Self.retentionRecordName(serverId: serverId), zoneID: zoneID)
             let rec = CKRecord(recordType: "RecapSettings", recordID: rid)
             rec["weeklyRetention"]  = Int64(w)
             rec["monthlyRetention"] = Int64(m)
             rec["yearlyRetention"]  = Int64(y)
             rec["updatedAt"]        = updatedAt
-            // Singleton, Last-write-wins → Server-Konflikt bewusst überschreiben.
+            // Ein Record pro Account, Last-write-wins → Server-Konflikt bewusst überschreiben.
             _ = try await withCKTimeout { [db] in
                 try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
             }
-            Self.setUserDefault(.double(updatedAt), forKey: retentionSyncedAtKey)
+            Self.setUserDefault(.double(updatedAt), forKey: syncedAtKey)
             log("Retention settings uploaded")
         } catch {
             log("Retention upload failed — will retry on next sync: \(error.localizedDescription)", isError: true)
@@ -1310,15 +1327,27 @@ actor CloudKitSyncService {
     }
 
     /// Übernimmt einen eingehenden Retention-Record, wenn er neuer ist als der lokale Stand.
+    /// Der Account wird aus dem Record-Namen gelesen (nicht dem aktuell aktiven Server
+    /// entnommen), da ein Download-Zyklus auch Records anderer Accounts derselben
+    /// iCloud-Zone verarbeiten kann.
     private func applyIncomingRetention(_ record: CKRecord) {
+        guard let serverId = Self.serverId(fromRetentionRecordName: record.recordID.recordName) else { return }
         guard let updatedAt = record["updatedAt"] as? Double else { return }
-        let localUpdated = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
+        let updatedAtKey = retentionUpdatedAtKey(serverId: serverId)
+        let syncedAtKey = retentionSyncedAtKey(serverId: serverId)
+        let localUpdated = UserDefaults.standard.double(forKey: updatedAtKey)
         guard updatedAt > localUpdated else { return }   // lokaler Wert ist neuer → behalten
-        if let w = record["weeklyRetention"]  as? Int64 { Self.setUserDefault(.int(Int(w)), forKey: Self.weeklyKey) }
-        if let m = record["monthlyRetention"] as? Int64 { Self.setUserDefault(.int(Int(m)), forKey: Self.monthlyKey) }
-        if let y = record["yearlyRetention"]  as? Int64 { Self.setUserDefault(.int(Int(y)), forKey: Self.yearlyKey) }
-        Self.setUserDefault(.double(updatedAt), forKey: retentionUpdatedAtKey)
-        Self.setUserDefault(.double(updatedAt), forKey: retentionSyncedAtKey)   // kommt vom Server → kein Re-Upload
+        if let w = record["weeklyRetention"]  as? Int64 {
+            Self.setUserDefault(.int(Int(w)), forKey: RecapPeriod.PeriodType.week.retentionKey(serverId: serverId))
+        }
+        if let m = record["monthlyRetention"] as? Int64 {
+            Self.setUserDefault(.int(Int(m)), forKey: RecapPeriod.PeriodType.month.retentionKey(serverId: serverId))
+        }
+        if let y = record["yearlyRetention"]  as? Int64 {
+            Self.setUserDefault(.int(Int(y)), forKey: RecapPeriod.PeriodType.year.retentionKey(serverId: serverId))
+        }
+        Self.setUserDefault(.double(updatedAt), forKey: updatedAtKey)
+        Self.setUserDefault(.double(updatedAt), forKey: syncedAtKey)   // kommt vom Server → kein Re-Upload
         log("Retention settings updated from iCloud")
     }
 
@@ -1512,7 +1541,7 @@ actor CloudKitSyncService {
             clearChangeTokens()
             clearPendingPlayEventDeletions()
             clearPendingMarkerDeletions()   // Zone weg = wartende Marker-Löschungen erledigt
-            await markLocalAsUnsyncedForReUpload()
+            await markLocalAsUnsyncedForReUpload(serverId: await resolvedServerId())
             await MainActor.run {
                 status.lastSyncDate = Date()
                 status.isSyncing = false
@@ -1525,7 +1554,7 @@ actor CloudKitSyncService {
                 clearChangeTokens()
                 clearPendingPlayEventDeletions()
                 clearPendingMarkerDeletions()
-                await markLocalAsUnsyncedForReUpload()
+                await markLocalAsUnsyncedForReUpload(serverId: await resolvedServerId())
                 log("iCloud zone already gone")
             } else {
                 log("Zone deletion failed: \(error.localizedDescription)", isError: true)
@@ -1533,11 +1562,17 @@ actor CloudKitSyncService {
         }
     }
 
-    private func markLocalAsUnsyncedForReUpload() async {
-        // Settings sind serverunabhängig: nach einem Zone-Wipe den lokalen Stand neu
-        // hochladbar machen, damit er nicht aus iCloud verschwindet.
-        if UserDefaults.standard.double(forKey: retentionUpdatedAtKey) > 0 {
-            Self.setUserDefault(.double(0), forKey: retentionSyncedAtKey)
+    private func markLocalAsUnsyncedForReUpload(serverId: String?) async {
+        // Lyrics-/UI-Settings sind account-unabhängig: nach einem Zone-Wipe den lokalen
+        // Stand neu hochladbar machen, damit er nicht aus iCloud verschwindet. Retention
+        // ist dagegen pro Account — nur re-uploaden, wenn wir wissen, für welchen Account.
+        // Caller fallen schon auf `ServerStore.shared.activeServer?.stableId` zurück, falls
+        // die volle Credential-Auflösung (Keychain) gerade fehlschlägt — sonst würde ein
+        // transienter Fehler genau in diesem Moment die Retention-Neusynchronisation
+        // dauerhaft verschlucken, statt nur einmalig zu verzögern.
+        if let serverId, !serverId.isEmpty,
+           UserDefaults.standard.double(forKey: retentionUpdatedAtKey(serverId: serverId)) > 0 {
+            Self.setUserDefault(.double(0), forKey: retentionSyncedAtKey(serverId: serverId))
         }
         let lyricsUpdatedAt = UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey)
         let useCustomLyricsServer = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
@@ -2153,6 +2188,16 @@ actor CloudKitSyncService {
         }
     }
 
+    /// Falls back to `ServerStore`'s plain (no Keychain access) active-server record when
+    /// full credential resolution fails — used for bookkeeping like `markLocalAsUnsyncedForReUpload`
+    /// where we just need to know *which* account, not authenticate as them.
+    private func resolvedServerId() async -> String? {
+        if let context = await resolvedServerRequestContext() {
+            return context.serverId
+        }
+        return await ServerStore.shared.activeServer?.stableId
+    }
+
     private func canonicalizeLocalRecapRegistry(serverId: String) async {
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         let grouped = Dictionary(grouping: entries) { entry in
@@ -2274,8 +2319,8 @@ actor CloudKitSyncService {
         }
         if canSync(.recap) {
             await runVisibleStatusStep(statusText("sync_status_syncing_recaps")) {
-                await pushRetentionIfNeeded()
                 if let serverContext = await resolvedServerRequestContext() {
+                    await pushRetentionIfNeeded(serverId: serverContext.serverId)
                     await reuploadAllRecapMarkers(requestContext: serverContext)
                     await canonicalizeLocalRecapRegistry(serverId: serverContext.serverId)
                     let updated = await applyRecapDiffsWithNavidrome(
