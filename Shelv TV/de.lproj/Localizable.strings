@@ -133,7 +133,7 @@
 "playlist_name" = "Playlist-Name";
 "add_to_playlist_2" = "Zu Playlist hinzufügen";
 "song_already_in_playlist_title" = "Bereits in Playlist";
-"song_already_in_playlist_message" = "Dieser Song ist bereits in dieser Playlist.";
+"song_already_in_playlist_message" = "%d Song ist bereits in dieser Playlist.";
 "songs_already_in_playlist_message_format" = "%d Songs sind bereits in dieser Playlist.";
 "discard" = "Verwerfen";
 "add_anyway" = "Trotzdem hinzufügen";
