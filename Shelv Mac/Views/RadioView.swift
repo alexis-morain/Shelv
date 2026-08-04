@@ -202,7 +202,7 @@ struct RadioView: View {
             Label(String(localized: "play"), systemImage: "play.fill")
         }
         Button {
-            editingItem = item
+            openEditor(for: item)
         } label: {
             Label(String(localized: "edit"), systemImage: "pencil")
         }
@@ -212,6 +212,18 @@ struct RadioView: View {
             } label: {
                 Label(String(localized: "delete"), systemImage: "trash")
             }
+        }
+    }
+
+    // Known SwiftUI-on-macOS issue: `.sheet(item:)` can silently stop re-presenting after
+    // several open/close cycles if the previous dismissal hasn't fully settled before the
+    // binding is reassigned. Forcing the binding through `nil` first, then setting the real
+    // value on the next run loop tick, reliably gives SwiftUI a fresh nil → non-nil
+    // transition to react to instead of relying on the (sometimes-stuck) internal state.
+    private func openEditor(for item: RadioStationDisplayItem) {
+        editingItem = nil
+        DispatchQueue.main.async {
+            editingItem = item
         }
     }
 }
