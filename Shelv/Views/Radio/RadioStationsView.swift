@@ -129,12 +129,14 @@ struct RadioStationsView: View {
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button {
-                        deleteItem = item
-                    } label: {
-                        Label(String(localized: "delete"), systemImage: "trash")
+                    if isAdmin {
+                        Button {
+                            deleteItem = item
+                        } label: {
+                            Label(String(localized: "delete"), systemImage: "trash")
+                        }
+                        .tint(.red)
                     }
-                    .tint(.red)
 
                     Button {
                         editingItem = item
@@ -194,10 +196,12 @@ struct RadioStationsView: View {
         } label: {
             Label(String(localized: "edit"), systemImage: "pencil")
         }
-        Button(role: .destructive) {
-            deleteItem = item
-        } label: {
-            Label(String(localized: "delete"), systemImage: "trash")
+        if isAdmin {
+            Button(role: .destructive) {
+                deleteItem = item
+            } label: {
+                Label(String(localized: "delete"), systemImage: "trash")
+            }
         }
     }
 
@@ -358,6 +362,18 @@ private struct RadioStationEditorView: View {
     @State private var isSaving = false
     @State private var saveError: String?
 
+    // Prefilling via `init` (instead of `.onAppear`) so the first rendered frame already
+    // shows the real values — an onAppear-based prefill runs one frame late and is
+    // visible as a brief flash/glitch (e.g. the AzuraCast toggle flipping right after open).
+    init(item: RadioStationDisplayItem?) {
+        self.item = item
+        _name = State(initialValue: item?.name ?? "")
+        _streamURL = State(initialValue: item?.streamURL ?? "")
+        _useAzuraCastAPI = State(initialValue: item?.metadata.useAzuraCastAPI ?? false)
+        _azuraCastAPIURL = State(initialValue: item?.metadata.azuraCastAPIURL ?? "")
+        _showSongCover = State(initialValue: item?.metadata.showSongCover ?? true)
+    }
+
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isEditing: Bool { item != nil }
     private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
@@ -426,7 +442,6 @@ private struct RadioStationEditorView: View {
                         .disabled(!canSave)
                 }
             }
-            .onAppear(perform: prefill)
             .alert(
                 String(localized: "error"),
                 isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
@@ -436,15 +451,6 @@ private struct RadioStationEditorView: View {
                 Text(saveError ?? "")
             }
         }
-    }
-
-    private func prefill() {
-        guard let item else { return }
-        name = item.name
-        streamURL = item.streamURL
-        useAzuraCastAPI = item.metadata.useAzuraCastAPI
-        azuraCastAPIURL = item.metadata.azuraCastAPIURL
-        showSongCover = item.metadata.showSongCover
     }
 
     private func save() {
