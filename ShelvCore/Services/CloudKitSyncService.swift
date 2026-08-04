@@ -217,6 +217,52 @@ private func withCKTimeout<T: Sendable>(
     }
 }
 
+/// A fixed wall-clock budget (`withCKTimeout` above) is wrong for a multi-page fetch like
+/// `CKFetchRecordZoneChangesOperation`: a large one-time backlog (e.g. a fresh account, or
+/// a reset change token) can legitimately take longer than any single call's budget while
+/// still actively receiving pages. This tracks *activity* instead — any record/deletion/
+/// token callback resets the clock — so only genuine silence (nothing at all for `seconds`)
+/// counts as a hang. Plain lock instead of an actor: callbacks fire per-record from
+/// CKOperation's own queue, and hopping through an actor for every single record would add
+/// needless overhead for what's just an integer bump.
+private final class CKActivityWatchdog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var generation = 0
+    private var isCancelled = false
+
+    func markActivity() {
+        lock.lock(); defer { lock.unlock() }
+        generation += 1
+    }
+
+    func cancel() {
+        lock.lock(); defer { lock.unlock() }
+        isCancelled = true
+    }
+
+    /// Polls in `seconds`-sized windows. Returns `true` once a full window passes with no
+    /// recorded activity, `false` if cancelled (i.e. the operation finished normally) first.
+    func waitForInactivity(seconds: TimeInterval) async -> Bool {
+        while true {
+            let before = generationSnapshot()
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            let (after, cancelled) = stateSnapshot()
+            if cancelled { return false }
+            if after == before { return true }
+        }
+    }
+
+    private func generationSnapshot() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        return generation
+    }
+
+    private func stateSnapshot() -> (Int, Bool) {
+        lock.lock(); defer { lock.unlock() }
+        return (generation, isCancelled)
+    }
+}
+
 // MARK: - CloudKitSyncService
 
 actor CloudKitSyncService {
@@ -793,10 +839,8 @@ actor CloudKitSyncService {
             let token = changeToken(for: category)
             let hasToken = token != nil
             debug("[CloudKitSync] Fetching \(category.displayName) changes with token: \(hasToken ? "hasToken" : "noToken")")
-            let (records, deletions, newToken) = try await withCKTimeout(seconds: 30) { [self] in
-                try await self.fetchZoneChanges(previousToken: token)
-            }
-            debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions for \(category.displayName)")
+            let (records, deletions, newToken, timedOut) = try await fetchZoneChanges(previousToken: token)
+            debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions for \(category.displayName)\(timedOut ? " (partial — still catching up)" : "")")
 
             // Deletionen zuerst: verhindert, dass ein Add mit gleichem recordName
             // (z.B. Recap-Marker Reset + Neu-Erzeugung auf anderem Gerät) durch
@@ -847,7 +891,7 @@ actor CloudKitSyncService {
                 recapsIn > 0 ? "\(recapsIn) recaps" : nil,
                 settingsIn > 0 ? "\(settingsIn) settings" : nil
             ].compactMap { $0 }.joined(separator: ", ")
-            log("Downloaded \(category.displayName): \(downloadedSummary.isEmpty ? "no changes" : downloadedSummary)")
+            log("Downloaded \(category.displayName): \(downloadedSummary.isEmpty ? "no changes" : downloadedSummary)\(timedOut ? " — still catching up, will continue next sync" : "")")
             if playsDel + recapsDel + settingsDel > 0 {
                 let deletedSummary = [
                     playsDel > 0 ? "\(playsDel) plays" : nil,
@@ -883,8 +927,21 @@ actor CloudKitSyncService {
         return stats
     }
 
-    private func fetchZoneChanges(previousToken: CKServerChangeToken?) async throws -> (changed: [CKRecord], deleted: [(CKRecord.ID, CKRecord.RecordType)], token: CKServerChangeToken?) {
-        try await withCheckedThrowingContinuation { continuation in
+    /// `timedOut` means the fetch didn't finish within `inactivityTimeout` seconds of *no*
+    /// callback activity — `changed`/`deleted`/`token` still reflect whatever was received
+    /// up to that point (not discarded), so the caller can apply and persist that partial
+    /// progress instead of repeating the whole backlog from scratch next time. The
+    /// underlying operation isn't cancelled (a wedged CKOperation isn't guaranteed to
+    /// respond to cancellation) — just abandoned; its eventual result, if any arrives late,
+    /// is discarded via the resume guard.
+    private func fetchZoneChanges(
+        previousToken: CKServerChangeToken?,
+        inactivityTimeout: TimeInterval = 30
+    ) async throws -> (changed: [CKRecord], deleted: [(CKRecord.ID, CKRecord.RecordType)], token: CKServerChangeToken?, timedOut: Bool) {
+        let resumeGuard = CKTimeoutResumeGuard()
+        let watchdog = CKActivityWatchdog()
+
+        return try await withCheckedThrowingContinuation { continuation in
             var changed: [CKRecord] = []
             var deleted: [(CKRecord.ID, CKRecord.RecordType)] = []
             var latestToken: CKServerChangeToken?
@@ -900,18 +957,22 @@ actor CloudKitSyncService {
             op.fetchAllChanges = true
 
             op.recordWasChangedBlock = { _, result in
+                watchdog.markActivity()
                 if case .success(let record) = result { changed.append(record) }
             }
 
             op.recordWithIDWasDeletedBlock = { recordID, recordType in
+                watchdog.markActivity()
                 deleted.append((recordID, recordType))
             }
 
             op.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
+                watchdog.markActivity()
                 if let token { latestToken = token }
             }
 
             op.recordZoneFetchResultBlock = { _, result in
+                watchdog.markActivity()
                 switch result {
                 case .success(let (token, _, _)):
                     latestToken = token
@@ -921,14 +982,26 @@ actor CloudKitSyncService {
             }
 
             op.fetchRecordZoneChangesResultBlock = { result in
-                if let zoneError {
-                    continuation.resume(throwing: zoneError)
-                    return
+                watchdog.cancel()
+                Task {
+                    guard await resumeGuard.tryResume() else { return }
+                    if let zoneError {
+                        continuation.resume(throwing: zoneError)
+                        return
+                    }
+                    switch result {
+                    case .success:
+                        continuation.resume(returning: (changed, deleted, latestToken, false))
+                    case .failure(let err):
+                        continuation.resume(throwing: err)
+                    }
                 }
-                switch result {
-                case .success: continuation.resume(returning: (changed, deleted, latestToken))
-                case .failure(let err): continuation.resume(throwing: err)
-                }
+            }
+
+            Task {
+                guard await watchdog.waitForInactivity(seconds: inactivityTimeout) else { return }
+                guard await resumeGuard.tryResume() else { return }
+                continuation.resume(returning: (changed, deleted, latestToken, true))
             }
 
             db.add(op)
