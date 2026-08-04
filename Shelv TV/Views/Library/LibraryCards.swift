@@ -372,6 +372,20 @@ private struct AlbumContextMenuModifier: ViewModifier {
 }
 
 /// Native tvOS-Auswahl zum Hinzufügen von Songs zu einer bestehenden oder neuen Playlist.
+private struct DuplicateSongsPrompt: Identifiable {
+    let id: String
+    let playlist: Playlist
+    let songIds: [String]
+    let duplicateIds: Set<String>
+
+    init(playlist: Playlist, songIds: [String], duplicateIds: Set<String>) {
+        self.id = playlist.id
+        self.playlist = playlist
+        self.songIds = songIds
+        self.duplicateIds = duplicateIds
+    }
+}
+
 private struct AddToPlaylistDialogModifier: ViewModifier {
     @Binding var isPresented: Bool
     let songIds: [String]
@@ -379,11 +393,24 @@ private struct AddToPlaylistDialogModifier: ViewModifier {
     @ObservedObject private var recap = RecapStore.shared
     @AppStorage("recapEnabled") private var recapEnabled = false
     @State private var showCreate = false
+    @State private var showDuplicatePrompt = false
+    @State private var duplicatePrompt: DuplicateSongsPrompt?
 
     private var playlists: [Playlist] {
         recapEnabled
             ? store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
             : store.playlists
+    }
+
+    private func add(_ ids: [String], to playlist: Playlist) async {
+        let existing = await store.playlistSongs(playlist)
+        let duplicateIds = PlaylistDuplicateChecker.duplicateSongIds(in: existing, among: ids)
+        if duplicateIds.isEmpty {
+            await store.addSongs(ids, toPlaylist: playlist.id)
+        } else {
+            duplicatePrompt = DuplicateSongsPrompt(playlist: playlist, songIds: ids, duplicateIds: duplicateIds)
+            showDuplicatePrompt = true
+        }
     }
 
     func body(content: Content) -> some View {
@@ -399,7 +426,7 @@ private struct AddToPlaylistDialogModifier: ViewModifier {
                 ForEach(playlists) { pl in
                     Button(pl.name) {
                         let ids = songIds
-                        Task { await store.addSongs(ids, toPlaylist: pl.id) }
+                        Task { await add(ids, to: pl) }
                     }
                 }
                 Button(String(localized: "cancel"), role: .cancel) {}
@@ -414,6 +441,25 @@ private struct AddToPlaylistDialogModifier: ViewModifier {
             .onChange(of: isPresented) { _, presented in
                 guard presented else { return }
                 Task { await store.loadPlaylists() }
+            }
+            .confirmationDialog(
+                String(localized: "song_already_in_playlist_title"),
+                isPresented: $showDuplicatePrompt,
+                titleVisibility: .visible,
+                presenting: duplicatePrompt
+            ) { prompt in
+                Button(String(localized: "discard"), role: .cancel) {
+                    let remaining = prompt.songIds.filter { !prompt.duplicateIds.contains($0) }
+                    guard !remaining.isEmpty else { return }
+                    Task { await store.addSongs(remaining, toPlaylist: prompt.playlist.id) }
+                }
+                Button(String(localized: "add_anyway")) {
+                    Task { await store.addSongs(prompt.songIds, toPlaylist: prompt.playlist.id) }
+                }
+            } message: { prompt in
+                Text(prompt.duplicateIds.count == 1
+                     ? String(localized: "song_already_in_playlist_message")
+                     : String(format: String(localized: "songs_already_in_playlist_message_format"), prompt.duplicateIds.count))
             }
     }
 }

@@ -894,6 +894,14 @@ class LibraryStore: ObservableObject {
         }
     }
 
+    /// Best-effort duplicate probe: fetches the playlist's current songs and returns which of
+    /// `songIds` are already present. Fails open (returns empty) on any error — this is a UX
+    /// nicety, not something that should block the add flow if the server is briefly unreachable.
+    func songIdsAlreadyInPlaylist(_ playlist: Playlist, songIds: [String]) async -> Set<String> {
+        guard let detail = try? await api.getPlaylist(id: playlist.id) else { return [] }
+        return PlaylistDuplicateChecker.duplicateSongIds(in: detail.songs ?? [], among: songIds)
+    }
+
     @discardableResult
     func addSongsToPlaylist(_ playlist: Playlist, songIds: [String]) async -> Bool {
         do {

@@ -1,5 +1,19 @@
 import SwiftUI
 
+private struct DuplicateSongsPrompt: Identifiable {
+    let id: String
+    let playlist: Playlist
+    let songIds: [String]
+    let duplicateIds: Set<String>
+
+    init(playlist: Playlist, songIds: [String], duplicateIds: Set<String>) {
+        self.id = playlist.id
+        self.playlist = playlist
+        self.songIds = songIds
+        self.duplicateIds = duplicateIds
+    }
+}
+
 struct AddToPlaylistSheet: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     let songIds: [String]
@@ -14,6 +28,8 @@ struct AddToPlaylistSheet: View {
     @State private var addingToPlaylistId: String?
     @State private var toast: ShelveToast?
     @FocusState private var nameFieldFocused: Bool
+    @State private var showDuplicatePrompt = false
+    @State private var duplicatePrompt: DuplicateSongsPrompt?
 
     private var visiblePlaylists: [Playlist] {
         recapEnabled
@@ -41,13 +57,13 @@ struct AddToPlaylistSheet: View {
                                 guard addingToPlaylistId == nil else { return }
                                 addingToPlaylistId = playlist.id
                                 Task {
-                                    let success = await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
-                                    addingToPlaylistId = nil
-                                    if success {
-                                        haptic()
-                                        toast = ShelveToast(message: String(format: String(localized: "added_to_playlist_format"), playlist.name))
-                                        try? await Task.sleep(for: .milliseconds(1200))
-                                        dismiss()
+                                    let duplicateIds = await libraryStore.songIdsAlreadyInPlaylist(playlist, songIds: songIds)
+                                    if duplicateIds.isEmpty {
+                                        await performAdd(playlist: playlist, songIds: songIds)
+                                    } else {
+                                        addingToPlaylistId = nil
+                                        duplicatePrompt = DuplicateSongsPrompt(playlist: playlist, songIds: songIds, duplicateIds: duplicateIds)
+                                        showDuplicatePrompt = true
                                     }
                                 }
                             } label: {
@@ -93,9 +109,40 @@ struct AddToPlaylistSheet: View {
             .sheet(isPresented: $showCreateSheet) {
                 createAndAddSheet
             }
+            .alert(
+                String(localized: "song_already_in_playlist_title"),
+                isPresented: $showDuplicatePrompt,
+                presenting: duplicatePrompt
+            ) { prompt in
+                Button(String(localized: "discard"), role: .cancel) {
+                    let remaining = prompt.songIds.filter { !prompt.duplicateIds.contains($0) }
+                    guard !remaining.isEmpty else { return }
+                    addingToPlaylistId = prompt.playlist.id
+                    Task { await performAdd(playlist: prompt.playlist, songIds: remaining) }
+                }
+                Button(String(localized: "add_anyway")) {
+                    addingToPlaylistId = prompt.playlist.id
+                    Task { await performAdd(playlist: prompt.playlist, songIds: prompt.songIds) }
+                }
+            } message: { prompt in
+                Text(prompt.duplicateIds.count == 1
+                     ? String(localized: "song_already_in_playlist_message")
+                     : String(format: String(localized: "songs_already_in_playlist_message_format"), prompt.duplicateIds.count))
+            }
             .shelveToast($toast)
         }
         .tint(accentColor)
+    }
+
+    private func performAdd(playlist: Playlist, songIds: [String]) async {
+        let success = await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
+        addingToPlaylistId = nil
+        if success {
+            haptic()
+            toast = ShelveToast(message: String(format: String(localized: "added_to_playlist_format"), playlist.name))
+            try? await Task.sleep(for: .milliseconds(1200))
+            dismiss()
+        }
     }
 
     private var createAndAddSheet: some View {

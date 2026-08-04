@@ -88,6 +88,11 @@
 "import_finished" = "导入完成";
 "all_playlists_up_to_date" = "所有播放列表已是最新";
 "add_to_playlist_2" = "添加到播放列表";
+"song_already_in_playlist_title" = "已在播放列表中";
+"song_already_in_playlist_message" = "这首歌曲已经在此播放列表中。";
+"songs_already_in_playlist_message_format" = "%d 首歌曲已经在此播放列表中。";
+"discard" = "放弃";
+"add_anyway" = "仍然添加";
 "existing_playlists" = "现有播放列表";
 "create_new" = "新建";
 "playlist_name" = "播放列表名称";
