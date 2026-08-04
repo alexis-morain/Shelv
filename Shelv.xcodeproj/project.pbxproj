@@ -51,6 +51,7 @@
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 		BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */; };
+		11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */; };
 		D65A40B16B924F709F912515 /* ShelvCore/Services/ConcurrencyLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */; };
 /* End PBXBuildFile section */
 
@@ -99,6 +100,7 @@
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RadioStationChangeLogic.swift; sourceTree = "<group>"; };
 		D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapExpectedSongsLogic.swift; sourceTree = "<group>"; };
+		3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RecapPeriod.swift; sourceTree = "<group>"; };
 		DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConcurrencyLimiter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -189,6 +191,7 @@
 				10ACD444D3F226337CB21004 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */,
 				1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */,
 				D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */,
+				3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */,
 				BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */,
 				BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */,
 				BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */,
@@ -457,6 +460,7 @@
 				BC1001362FFE000000000001 /* ShelvCore/Services/RecapSyncLogic.swift in Sources */,
 				A6370E2FCC02E636B1CE06BB /* ShelvCore/Services/PlayLogReconciliationLogic.swift in Sources */,
 				BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */,
+				11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */,
 				BC1001382FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift in Sources */,
 				BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */,
 				BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */,
