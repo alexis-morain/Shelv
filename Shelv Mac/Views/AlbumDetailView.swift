@@ -122,6 +122,7 @@ struct AlbumDetailView: View {
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle(vm.album?.name ?? albumName)
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
+        .hidesTitlebarSeparator()
         .task(id: albumId) {
             let local = downloadStore.albums.first(where: { $0.albumId == albumId })
             await vm.load(albumId: albumId, fallback: local)
@@ -264,6 +265,20 @@ struct AlbumDetailView: View {
             .buttonStyle(.bordered)
             .controlSize(compact ? .regular : .large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
+
+            if showPlaylistActions {
+                Button {
+                    let ids = displaySongs.map(\.id)
+                    guard !ids.isEmpty else { return }
+                    NotificationCenter.default.post(name: .addSongsToPlaylist, object: ids)
+                } label: {
+                    Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(compact ? .regular : .large)
+                .disabled(vm.isLoading || displaySongs.isEmpty)
+            }
 
             if enableDownloads, let album = vm.album {
                 albumDownloadButtons(for: album, iconOnly: iconOnly, compact: compact)
