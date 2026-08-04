@@ -105,6 +105,11 @@ class AppState: ObservableObject {
                 server: server,
                 password: password
             )
+            // Passive capability probe — a failure here shouldn't block adding the
+            // server itself, so it's silently ignored (leaves isAdmin at its default).
+            if let isAdmin = try? await api.getUserIsAdmin(server: server, password: password) {
+                server.isAdmin = isAdmin
+            }
             guard await serverStore.add(server: server, password: password) else {
                 errorMessage = String(localized: "credential_storage_failed")
                 return false

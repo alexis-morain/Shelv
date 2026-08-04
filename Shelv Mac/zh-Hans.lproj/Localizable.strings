@@ -359,6 +359,8 @@
 "remove" = "移除";
 "add_server_2" = "添加服务器";
 "edit_server" = "编辑服务器";
+"test_connection" = "测试连接";
+"connection_successful" = "连接成功！";
 "leave_blank_to_keep_current" = "留空以保留当前值";
 "save" = "保存";
 "system" = "跟随系统";
