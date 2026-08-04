@@ -214,10 +214,13 @@ final class RadioStationStore: ObservableObject {
         api.activeServer ?? ServerStore.shared.activeServer
     }
 
-    /// Remote identity used for Cloud-synced station metadata.
+    /// Remote identity used for Cloud-synced station metadata. Deliberately the
+    /// account-independent `radioServerIdentity` (not `stableId`) — AzuraCast config is a
+    /// property of the station/server, not of which account is logged in, so different
+    /// accounts on the same physical server correctly share it.
     var activeServerId: String? {
         guard let server = selectedServer else { return nil }
-        return server.stableId.isEmpty ? server.id.uuidString : server.stableId
+        return server.radioServerIdentity
     }
 
     /// Local configuration identity used for station-list cache ownership.
@@ -314,6 +317,13 @@ final class RadioStationStore: ObservableObject {
     ) async -> Bool {
         guard let operationConfigurationID = activeServerConfigurationID,
               let operationMetadataServerID = activeServerId else { return false }
+        // Defense in depth — the UI already hides "add station" for non-admins, but the
+        // store itself shouldn't rely solely on that: creating a station is admin-only on
+        // every Subsonic server, on every platform this store is shared with.
+        guard selectedServer?.isAdmin ?? true else {
+            errorMessage = String(localized: "radio_station_admin_required")
+            return false
+        }
         do {
             let normalized = try validate(name: name, streamURL: streamURL)
             try await api.createInternetRadioStation(name: normalized.name, streamURL: normalized.streamURL)
@@ -369,33 +379,27 @@ final class RadioStationStore: ObservableObject {
             let normalized = try validate(name: name, streamURL: streamURL)
             let trimmedAPIURL = azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            // Streaming data (name/URL) is server state — it's the only part that requires
-            // an admin-only Subsonic call. AzuraCast config is local/iCloud state. Only doing
-            // the work each side actually needs means a non-admin editing just the AzuraCast
-            // fields never touches the (doomed-to-fail) server call at all.
-            let streamingChanged = normalized.name != item.name
-                || RadioStationMetadata.normalizedStreamURL(normalized.streamURL) != RadioStationMetadata.normalizedStreamURL(item.streamURL)
-            let azuraCastChanged = useAzuraCastAPI != item.metadata.useAzuraCastAPI
-                || trimmedAPIURL != item.metadata.azuraCastAPIURL
-                || showSongCover != item.metadata.showSongCover
+            let changes = RadioStationChangeLogic.detectChanges(
+                currentItem: item,
+                normalizedName: normalized.name,
+                normalizedStreamURL: normalized.streamURL,
+                useAzuraCastAPI: useAzuraCastAPI,
+                trimmedAzuraCastAPIURL: trimmedAPIURL,
+                showSongCover: showSongCover
+            )
+            let streamingChanged = changes.streamingChanged
+            let azuraCastChanged = changes.azuraCastChanged
 
-            guard streamingChanged || azuraCastChanged else {
+            guard changes.hasChanges else {
                 errorMessage = nil
                 return true
             }
 
-            if streamingChanged {
-                try await api.updateInternetRadioStation(
-                    id: item.station.id,
-                    name: normalized.name,
-                    streamURL: normalized.streamURL
-                )
-                guard matchesCurrentServerContext(
-                    configurationID: operationConfigurationID,
-                    metadataServerID: operationMetadataServerID
-                ) else { return true }
-            }
-
+            // AzuraCast (local/iCloud, never admin-gated) is saved BEFORE the streaming
+            // call: if a non-admin's stale client somehow still reaches this point and the
+            // admin-only server call below throws, the independent AzuraCast change the
+            // user was actually allowed to make still persists instead of being discarded
+            // by the same failure.
             if azuraCastChanged {
                 var metadata = RadioStationMetadata(
                     recordName: item.metadata.recordName,
@@ -432,6 +436,21 @@ final class RadioStationStore: ObservableObject {
             }
 
             if streamingChanged {
+                // Defense in depth — the UI already disables the Name/Stream-URL fields
+                // for non-admins, but the store itself shouldn't rely solely on that.
+                guard selectedServer?.isAdmin ?? true else {
+                    errorMessage = String(localized: "radio_station_admin_required")
+                    return false
+                }
+                try await api.updateInternetRadioStation(
+                    id: item.station.id,
+                    name: normalized.name,
+                    streamURL: normalized.streamURL
+                )
+                guard matchesCurrentServerContext(
+                    configurationID: operationConfigurationID,
+                    metadataServerID: operationMetadataServerID
+                ) else { return true }
                 await refresh(waitForCloudMetadata: false)
                 guard matchesCurrentServerContext(
                     configurationID: operationConfigurationID,

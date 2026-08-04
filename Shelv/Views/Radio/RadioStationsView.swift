@@ -4,6 +4,7 @@ import UIKit
 struct RadioStationsView: View {
     @ObservedObject private var store = RadioStationStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var serverStore = ServerStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("radioSortDirection") private var sortDirectionRaw = SortDirection.ascending.rawValue
 
@@ -13,7 +14,7 @@ struct RadioStationsView: View {
     @State private var toast: ShelveToast?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    private var isAdmin: Bool { ServerStore.shared.activeServer?.isAdmin ?? true }
+    private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var sortDirection: SortDirection { SortDirection(rawValue: sortDirectionRaw) ?? .ascending }
     private var displayItems: [RadioStationDisplayItem] {
         sortDirection == .descending ? Array(store.items.reversed()) : store.items
@@ -346,6 +347,7 @@ private struct RadioStationEditorView: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = RadioStationStore.shared
+    @ObservedObject private var serverStore = ServerStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
 
     @State private var name = ""
@@ -358,7 +360,7 @@ private struct RadioStationEditorView: View {
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isEditing: Bool { item != nil }
-    private var isAdmin: Bool { ServerStore.shared.activeServer?.isAdmin ?? true }
+    private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         !streamURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&

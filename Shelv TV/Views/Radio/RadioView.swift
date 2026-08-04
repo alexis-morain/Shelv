@@ -3,6 +3,7 @@ import SwiftUI
 struct RadioView: View {
     @ObservedObject private var store = RadioStationStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var serverStore = ServerStore.shared
     @AppStorage("radioSortDirectionTV") private var dirRaw = "ascending"
     @AppStorage("radioViewIsGridTV") private var isGrid = true
 
@@ -10,6 +11,7 @@ struct RadioView: View {
     @State private var editingItem: RadioStationDisplayItem?
     @State private var deleteItem: RadioStationDisplayItem?
 
+    private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
     private var displayItems: [RadioStationDisplayItem] {
         dir == .descending ? Array(store.items.reversed()) : store.items
@@ -29,10 +31,12 @@ struct RadioView: View {
                     Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
                 }
                 Spacer()
-                Button {
-                    showCreate = true
-                } label: {
-                    Label(String(localized: "new_radio_station"), systemImage: "plus")
+                if isAdmin {
+                    Button {
+                        showCreate = true
+                    } label: {
+                        Label(String(localized: "new_radio_station"), systemImage: "plus")
+                    }
                 }
             }
             .buttonStyle(.bordered)
@@ -289,6 +293,7 @@ private struct TVRadioStationEditSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = RadioStationStore.shared
+    @ObservedObject private var serverStore = ServerStore.shared
 
     @State private var name: String = ""
     @State private var streamURL: String = ""
@@ -296,7 +301,9 @@ private struct TVRadioStationEditSheet: View {
     @State private var azuraCastAPIURL = ""
     @State private var showSongCover = true
     @State private var isSaving = false
+    @State private var saveError: String?
 
+    private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var trimmedStreamURL: String { streamURL.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -304,7 +311,14 @@ private struct TVRadioStationEditSheet: View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 30) {
                 TextField(String(localized: "name"), text: $name)
+                    .disabled(!isAdmin)
                 TextField(String(localized: "streaming_link"), text: $streamURL)
+                    .disabled(!isAdmin)
+                if !isAdmin {
+                    Text(String(localized: "radio_station_admin_required"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle(String(localized: "use_azuracast_api"), isOn: $useAzuraCastAPI)
                 if useAzuraCastAPI {
                     TextField(String(localized: "api_url"), text: $azuraCastAPIURL)
@@ -326,6 +340,14 @@ private struct TVRadioStationEditSheet: View {
             }
             .padding(80)
             .onAppear(perform: prefill)
+        }
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
+        ) {
+            Button(String(localized: "ok"), role: .cancel) {}
+        } message: {
+            Text(saveError ?? "")
         }
     }
 
@@ -361,7 +383,11 @@ private struct TVRadioStationEditSheet: View {
                 )
             }
             isSaving = false
-            if ok { dismiss() }
+            if ok {
+                dismiss()
+            } else {
+                saveError = store.errorMessage ?? String(localized: "server_returned_an_error")
+            }
         }
     }
 }

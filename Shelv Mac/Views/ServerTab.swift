@@ -119,9 +119,20 @@ private struct ServerRow: View {
                 .frame(width: 26, height: 26)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(server.displayName)
-                    .font(.body)
-                    .fontWeight(isActive ? .semibold : .regular)
+                HStack(spacing: 6) {
+                    Text(server.displayName)
+                        .font(.body)
+                        .fontWeight(isActive ? .semibold : .regular)
+                    if server.isAdmin {
+                        Text(String(localized: "admin"))
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.2))
+                            .foregroundStyle(Color.red)
+                            .clipShape(Capsule())
+                    }
+                }
                 Text(server.username + " · " + server.activeBaseURL)
                     .font(.caption)
                     .foregroundStyle(.secondary)

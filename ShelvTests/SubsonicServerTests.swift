@@ -86,4 +86,59 @@ final class SubsonicServerTests: XCTestCase {
         XCTAssertNotEqual(base.derivedStableId, otherUser.derivedStableId)
         XCTAssertNotEqual(base.derivedStableId, otherServer.derivedStableId)
     }
+
+    // MARK: - isAdmin
+
+    func testIsAdminDefaultsToTrueOnInit() {
+        let server = SubsonicServer(baseURL: "https://music.example.com", username: "vasco")
+        XCTAssertTrue(server.isAdmin)
+    }
+
+    func testIsAdminDefaultsToTrueWhenDecodingLegacyPayloadMissingTheKey() throws {
+        // Simulates a server object persisted before `isAdmin` existed — must not
+        // silently lock out a real admin just because the field predates the flag.
+        let legacyJSON = """
+        {"id":"\(UUID().uuidString)","name":"Home","baseURL":"https://music.example.com","username":"vasco"}
+        """
+        let server = try JSONDecoder().decode(SubsonicServer.self, from: Data(legacyJSON.utf8))
+        XCTAssertTrue(server.isAdmin)
+    }
+
+    func testIsAdminRoundTripsThroughCodable() throws {
+        var server = SubsonicServer(baseURL: "https://music.example.com", username: "vasco")
+        server.isAdmin = false
+
+        let data = try JSONEncoder().encode(server)
+        let decoded = try JSONDecoder().decode(SubsonicServer.self, from: data)
+
+        XCTAssertFalse(decoded.isAdmin)
+    }
+
+    // MARK: - radioServerIdentity
+
+    func testRadioServerIdentityIsSharedAcrossDifferentAccountsOnTheSameServer() {
+        // Radio station AzuraCast metadata belongs to the station/server, not the
+        // logged-in account — two different accounts on the same physical server must
+        // resolve to the same identity so they share (not duplicate) that metadata.
+        let admin = SubsonicServer(baseURL: "https://music.example.com", username: "admin")
+        let guest = SubsonicServer(baseURL: "https://music.example.com", username: "guest")
+
+        XCTAssertEqual(admin.radioServerIdentity, guest.radioServerIdentity)
+        XCTAssertNotEqual(admin.radioServerIdentity, admin.derivedStableId)
+    }
+
+    func testRadioServerIdentityDiffersAcrossDifferentPhysicalServers() {
+        let first = SubsonicServer(baseURL: "https://music.example.com", username: "vasco")
+        let second = SubsonicServer(baseURL: "https://other.example.com", username: "vasco")
+
+        XCTAssertNotEqual(first.radioServerIdentity, second.radioServerIdentity)
+    }
+
+    func testRadioServerIdentityNormalizesEquivalentURLs() {
+        let first = SubsonicServer(baseURL: "HTTPS://Music.Example.com:443/api/subsonic/", username: "vasco")
+        let second = SubsonicServer(baseURL: "https://music.example.com/api/subsonic", username: "other")
+
+        XCTAssertEqual(first.radioServerIdentity, second.radioServerIdentity)
+        XCTAssertTrue(first.radioServerIdentity.hasPrefix("subsonic-url-"))
+    }
 }

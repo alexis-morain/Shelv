@@ -203,6 +203,17 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
         Self.derivedStableId(baseURL: baseURL, username: username)
     }
 
+    /// Stable identity for the physical server itself, independent of which account is
+    /// logged in — unlike `stableId`/`derivedStableId`, this deliberately excludes the
+    /// username. Used to scope data that belongs to the server/station rather than the
+    /// user account (e.g. radio station AzuraCast metadata), so two different accounts
+    /// on the same server share it instead of each getting a duplicated, orphaned copy.
+    var radioServerIdentity: String {
+        let canonicalURL = Self.canonicalIdentityURL(baseURL)
+        let digest = SHA256.hash(data: Data(canonicalURL.utf8))
+        return "subsonic-url-" + digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     var secondaryURL: String? {
         let trimmed = secondaryBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? nil : trimmed

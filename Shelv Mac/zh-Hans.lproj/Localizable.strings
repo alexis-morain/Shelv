@@ -571,6 +571,7 @@
 "hour_abbreviation" = "小时";
 "primary_url" = "主 URL";
 "secondary_url" = "备用 URL";
+"admin" = "管理员";
 "use_primary_url" = "使用主 URL";
 "use_secondary_url" = "使用备用 URL";
 "download_format" = "下载格式";
