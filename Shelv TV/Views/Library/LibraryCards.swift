@@ -466,9 +466,12 @@ private struct AddToPlaylistDialogModifier: ViewModifier {
                     Task { await store.addSongs(prompt.songIds, toPlaylist: prompt.playlist.id) }
                 }
             } message: { prompt in
-                Text(prompt.duplicateIds.count == 1
-                     ? String(localized: "song_already_in_playlist_message")
-                     : String(format: String(localized: "songs_already_in_playlist_message_format"), prompt.duplicateIds.count))
+                Text(String(
+                    format: String(localized: prompt.duplicateIds.count == 1
+                        ? "song_already_in_playlist_message"
+                        : "songs_already_in_playlist_message_format"),
+                    prompt.duplicateIds.count
+                ))
             }
     }
 }

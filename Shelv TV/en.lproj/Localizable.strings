@@ -137,7 +137,7 @@
 "playlist_name" = "Playlist Name";
 "add_to_playlist_2" = "Add to Playlist";
 "song_already_in_playlist_title" = "Already in Playlist";
-"song_already_in_playlist_message" = "This song is already in this playlist.";
+"song_already_in_playlist_message" = "%d song is already in this playlist.";
 "songs_already_in_playlist_message_format" = "%d songs are already in this playlist.";
 "discard" = "Discard";
 "add_anyway" = "Add Anyway";
