@@ -133,6 +133,17 @@ struct Shelv_TVApp: App {
                             _ = await serverStore.update(server: updated, password: nil)
                         }
                     }
+                    // Admin rights can change server-side at any time (e.g. demoted by another
+                    // admin) — refresh once per launch. Failure is silently ignored, this is a
+                    // passive capability probe, not a user-facing action.
+                    if let active = serverStore.activeServer,
+                       let pw = await serverStore.loadPassword(for: active),
+                       let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: active, password: pw),
+                       isAdmin != active.isAdmin {
+                        var updated = active
+                        updated.isAdmin = isAdmin
+                        _ = await serverStore.update(server: updated, password: nil)
+                    }
                     await CloudKitSyncService.shared.setup()
                     // Beim Kaltstart deterministisch einmal synchronisieren — setup() allein lädt
                     // keine Remote-Plays; erst syncNow() ruft downloadChanges() und holt die Historie.

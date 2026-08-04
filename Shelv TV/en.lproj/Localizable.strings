@@ -345,6 +345,8 @@
 "cache_cleared" = "Cache cleared";
 "active" = "Active";
 "activate" = "Activate";
+"admin" = "Admin";
+"radio_station_admin_required" = "Only server admin accounts can create radio stations.";
 "manage_server" = "Manage Server";
 "enable_downloads" = "Enable Downloads";
 "offline_mode" = "Offline Mode";

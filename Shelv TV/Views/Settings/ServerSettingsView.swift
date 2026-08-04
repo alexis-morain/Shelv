@@ -17,7 +17,14 @@ struct ServerSettingsView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(server.displayName)
+                                HStack(spacing: 8) {
+                                    Text(server.displayName)
+                                    if server.isAdmin {
+                                        Text(String(localized: "admin"))
+                                            .font(.caption)
+                                            .foregroundStyle(.red)
+                                    }
+                                }
                                 Text(server.baseURL)
                                     .foregroundStyle(.secondary)
                             }
@@ -249,6 +256,11 @@ struct ServerFormView: View {
                     testResult = error.localizedDescription
                     return
                 }
+                // Passive capability probe — a failure here shouldn't block saving the
+                // server itself, so it's silently ignored (leaves isAdmin unchanged).
+                if let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: updated, password: password) {
+                    updated.isAdmin = isAdmin
+                }
             }
             guard await serverStore.update(
                 server: updated,
@@ -267,6 +279,9 @@ struct ServerFormView: View {
                     server: server,
                     password: password
                 )
+                if let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: server, password: password) {
+                    server.isAdmin = isAdmin
+                }
                 guard await serverStore.add(server: server, password: password) else {
                     testSuccess = false
                     testResult = String(localized: "credential_storage_failed")
