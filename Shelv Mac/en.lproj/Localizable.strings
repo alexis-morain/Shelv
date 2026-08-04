@@ -574,6 +574,7 @@
 "primary_url" = "Primary URL";
 "secondary_url" = "Secondary URL";
 "admin" = "Admin";
+"radio_station_admin_required" = "Only server admin accounts can create radio stations.";
 "use_primary_url" = "Use Primary URL";
 "use_secondary_url" = "Use Secondary URL";
 "download_format" = "Download Format";

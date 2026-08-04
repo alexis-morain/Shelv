@@ -338,6 +338,8 @@
 "cache_cleared" = "缓存已清除";
 "active" = "当前";
 "activate" = "激活";
+"admin" = "管理员";
+"radio_station_admin_required" = "只有服务器管理员账户才能创建电台。";
 "manage_server" = "管理服务器";
 "enable_downloads" = "启用下载";
 "offline_mode" = "离线模式";

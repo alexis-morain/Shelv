@@ -104,6 +104,9 @@ struct LoginView: View {
                 server: server,
                 password: password
             )
+            if let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: server, password: password) {
+                server.isAdmin = isAdmin
+            }
             guard await serverStore.add(server: server, password: password) else {
                 errorMessage = String(localized: "credential_storage_failed")
                 return

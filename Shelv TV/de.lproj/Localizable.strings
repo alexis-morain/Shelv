@@ -338,6 +338,8 @@
 "cache_cleared" = "Cache geleert";
 "active" = "Aktiv";
 "activate" = "Aktivieren";
+"admin" = "Admin";
+"radio_station_admin_required" = "Nur Admin-Accounts können Radiosender erstellen.";
 "manage_server" = "Server verwalten";
 "enable_downloads" = "Downloads aktivieren";
 "offline_mode" = "Offline-Modus";
