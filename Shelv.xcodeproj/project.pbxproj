@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */; };
 		4B666BEAD970D72DFCFF9C7E /* ShelvCore/Services/RadioStationChangeLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */; };
 		767C48F98385493A929D3CF5 /* ShelvCore/Services/PlaylistDuplicateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */; };
 		A2A1A444FD22D6449A3A1550 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10ACD444D3F226337CB21004 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
@@ -51,13 +52,13 @@
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 		BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */; };
-		11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */; };
 		D65A40B16B924F709F912515 /* ShelvCore/Services/ConcurrencyLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		10ACD444D3F226337CB21004 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
+		3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RecapPeriod.swift; sourceTree = "<group>"; };
 		7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaylistDuplicateChecker.swift; sourceTree = "<group>"; };
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
@@ -100,7 +101,6 @@
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RadioStationChangeLogic.swift; sourceTree = "<group>"; };
 		D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapExpectedSongsLogic.swift; sourceTree = "<group>"; };
-		3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RecapPeriod.swift; sourceTree = "<group>"; };
 		DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConcurrencyLimiter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -568,7 +568,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -602,7 +602,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -653,7 +653,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = Shelv;
 				REGISTER_APP_GROUPS = YES;
@@ -702,7 +702,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = Shelv;
 				REGISTER_APP_GROUPS = YES;
@@ -868,7 +868,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -918,7 +918,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.4.2;
+				MARKETING_VERSION = 1.4.3;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
