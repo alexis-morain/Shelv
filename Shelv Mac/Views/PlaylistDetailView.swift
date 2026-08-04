@@ -207,6 +207,7 @@ struct PlaylistDetailView: View {
         .scrollContentBackground(.hidden)
         .navigationTitle(visiblePlaylistName)
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
+        .hidesTitlebarSeparator()
         .toolbar(content: toolbarContent)
         .alert(String(localized: "delete_downloads_2"), isPresented: $showDeleteDownloadConfirm) {
             Button(String(localized: "delete"), role: .destructive) {

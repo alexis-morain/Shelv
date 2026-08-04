@@ -20,6 +20,9 @@ struct ArtistDetailView: View {
     private var showFavoriteActions: Bool {
         personalizationVisibility.showFavoriteActions
     }
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
     @State private var showDeleteDownloadConfirm = false
@@ -232,6 +235,7 @@ struct ArtistDetailView: View {
         }
         .navigationTitle(vm.artist?.name ?? artistName)
         .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
+        .hidesTitlebarSeparator()
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
                 sortRaw = LibrarySortOption.name.rawValue
@@ -360,6 +364,22 @@ struct ArtistDetailView: View {
             .buttonStyle(.bordered)
             .controlSize(compact ? .regular : .large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
+
+            if showPlaylistActions {
+                Button {
+                    Task {
+                        let songs = await vm.fetchSongs(albums: displayAlbums)
+                        guard !songs.isEmpty else { return }
+                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
+                    }
+                } label: {
+                    Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(compact ? .regular : .large)
+                .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
+            }
 
             if enableDownloads, let detail = vm.artist {
                 artistDownloadButtons(for: detail, iconOnly: iconOnly, compact: compact)
