@@ -351,6 +351,8 @@
 "remove" = "Entfernen";
 "add_server_2" = "Server hinzufügen";
 "edit_server" = "Server bearbeiten";
+"test_connection" = "Verbindung testen";
+"connection_successful" = "Verbindung erfolgreich!";
 "leave_blank_to_keep_current" = "Leer lassen zum Beibehalten";
 "save" = "Speichern";
 "system" = "System";

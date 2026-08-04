@@ -209,6 +209,9 @@ private struct AddServerSheet: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var isTesting = false
+    @State private var testResult: String?
+    @State private var testSuccess = false
 
     private var trimmedSecondaryURL: String {
         secondaryURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -224,6 +227,27 @@ private struct AddServerSheet: View {
                 .font(.title2.bold())
 
             serverForm
+
+            Button {
+                Task { await testConnection() }
+            } label: {
+                HStack(spacing: 8) {
+                    if isTesting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: testSuccess ? "checkmark.circle.fill" : "network")
+                            .foregroundStyle(testSuccess ? .green : themeColor)
+                    }
+                    Text(String(localized: "test_connection"))
+                }
+            }
+            .disabled(isTesting || !canConnect)
+
+            if let testResult {
+                Text(testResult)
+                    .font(.caption)
+                    .foregroundStyle(testSuccess ? .green : .red)
+            }
 
             if let err = errorMessage {
                 Label(err, systemImage: "exclamationmark.triangle")
@@ -251,6 +275,23 @@ private struct AddServerSheet: View {
         .padding(24)
         .frame(width: 420)
         .interactiveDismissDisabled(isLoading)
+    }
+
+    private func testConnection() async {
+        isTesting = true
+        testResult = nil
+        testSuccess = false
+
+        let tempServer = SubsonicServer(name: name, baseURL: url, username: username)
+        do {
+            _ = try await SubsonicAPIService.shared.ping(server: tempServer, password: password)
+            testSuccess = true
+            testResult = String(localized: "connection_successful")
+        } catch {
+            testResult = error.localizedDescription
+        }
+
+        isTesting = false
     }
 
     @ViewBuilder
@@ -313,6 +354,10 @@ private struct EditServerSheet: View {
     @State private var originalPassword: String?
     @State private var isSaving = false
     @State private var errorMessage: String?
+    @State private var isTesting = false
+    @State private var testResult: String?
+    @State private var testSuccess = false
+    @Environment(\.themeColor) private var themeColor
 
     private var trimmedSecondaryURL: String {
         secondaryURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -362,6 +407,27 @@ private struct EditServerSheet: View {
                     .textFieldStyle(.roundedBorder)
             }
 
+            Button {
+                Task { await testConnection() }
+            } label: {
+                HStack(spacing: 8) {
+                    if isTesting {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: testSuccess ? "checkmark.circle.fill" : "network")
+                            .foregroundStyle(testSuccess ? .green : themeColor)
+                    }
+                    Text(String(localized: "test_connection"))
+                }
+            }
+            .disabled(isTesting || !canSave || password.isEmpty)
+
+            if let testResult {
+                Text(testResult)
+                    .font(.caption)
+                    .foregroundStyle(testSuccess ? .green : .red)
+            }
+
             if let errorMessage {
                 Label(errorMessage, systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.red)
@@ -401,6 +467,23 @@ private struct EditServerSheet: View {
         }
     }
 
+    private func testConnection() async {
+        isTesting = true
+        testResult = nil
+        testSuccess = false
+
+        let tempServer = SubsonicServer(name: name, baseURL: url, username: username)
+        do {
+            _ = try await SubsonicAPIService.shared.ping(server: tempServer, password: password)
+            testSuccess = true
+            testResult = String(localized: "connection_successful")
+        } catch {
+            testResult = error.localizedDescription
+        }
+
+        isTesting = false
+    }
+
     private func save() async {
         isSaving = true
         errorMessage = nil
@@ -434,6 +517,11 @@ private struct EditServerSheet: View {
             } catch {
                 errorMessage = error.localizedDescription
                 return
+            }
+            // Passive capability probe — a failure here shouldn't block saving the
+            // server itself, so it's silently ignored (leaves isAdmin unchanged).
+            if let isAdmin = try? await SubsonicAPIService.shared.getUserIsAdmin(server: updated, password: password) {
+                updated.isAdmin = isAdmin
             }
         }
         guard await serverStore.update(
