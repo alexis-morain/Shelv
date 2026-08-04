@@ -201,6 +201,11 @@ private struct TVRadioStationCard: View {
             }
             .buttonStyle(.card)
             .contextMenu {
+                Button {
+                    play()
+                } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill")
+                }
                 Button(String(localized: "edit"), action: edit)
                 if isAdmin {
                     Divider()
@@ -327,36 +332,42 @@ private struct TVRadioStationEditSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 30) {
-                TextField(String(localized: "name"), text: $name)
-                    .disabled(!isAdmin)
-                TextField(String(localized: "streaming_link"), text: $streamURL)
-                    .disabled(!isAdmin)
-                if !isAdmin {
-                    Text(String(localized: "radio_station_admin_required"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Toggle(String(localized: "use_azuracast_api"), isOn: $useAzuraCastAPI)
-                if useAzuraCastAPI {
-                    TextField(String(localized: "api_url"), text: $azuraCastAPIURL)
-                    Button {
-                        if let derived = RadioStationMetadata.derivedAzuraCastAPIURL(from: streamURL) {
-                            azuraCastAPIURL = derived
-                        }
-                    } label: {
-                        Label(String(localized: "fill_api_url_from_stream_url"), systemImage: "wand.and.stars")
+            // Scrollable — the non-admin hint text adds enough height that the fixed
+            // VStack content could otherwise overflow the screen and clip the Save/Cancel
+            // buttons at the bottom.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 30) {
+                    TextField(String(localized: "name"), text: $name)
+                        .disabled(!isAdmin)
+                        .foregroundStyle(isAdmin ? .primary : .secondary)
+                    TextField(String(localized: "streaming_link"), text: $streamURL)
+                        .disabled(!isAdmin)
+                        .foregroundStyle(isAdmin ? .primary : .secondary)
+                    if !isAdmin {
+                        Text(String(localized: "radio_station_admin_required"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    Toggle(String(localized: "show_song_cover"), isOn: $showSongCover)
+                    Toggle(String(localized: "use_azuracast_api"), isOn: $useAzuraCastAPI)
+                    if useAzuraCastAPI {
+                        TextField(String(localized: "api_url"), text: $azuraCastAPIURL)
+                        Button {
+                            if let derived = RadioStationMetadata.derivedAzuraCastAPIURL(from: streamURL) {
+                                azuraCastAPIURL = derived
+                            }
+                        } label: {
+                            Label(String(localized: "fill_api_url_from_stream_url"), systemImage: "wand.and.stars")
+                        }
+                        Toggle(String(localized: "show_song_cover"), isOn: $showSongCover)
+                    }
+                    HStack(spacing: 30) {
+                        Button(String(localized: "cancel"), role: .cancel) { dismiss() }
+                        Button(String(localized: "done")) { save() }
+                            .disabled(trimmedName.isEmpty || trimmedStreamURL.isEmpty || isSaving)
+                    }
                 }
-                HStack(spacing: 30) {
-                    Button(String(localized: "cancel"), role: .cancel) { dismiss() }
-                    Button(String(localized: "done")) { save() }
-                        .disabled(trimmedName.isEmpty || trimmedStreamURL.isEmpty || isSaving)
-                }
-                Spacer()
+                .padding(80)
             }
-            .padding(80)
         }
         .alert(
             String(localized: "error"),

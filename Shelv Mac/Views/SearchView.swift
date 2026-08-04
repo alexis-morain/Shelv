@@ -159,7 +159,7 @@ struct SearchView: View {
                             }
                         }
                         if !vm.songs.isEmpty {
-                            SearchSection(title: String(localized: "tracks")) {
+                            SearchSection(title: String(localized: "songs")) {
                                 ForEach(vm.songs) { song in
                                     SearchSongRow(
                                         song: song,
