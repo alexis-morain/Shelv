@@ -95,6 +95,7 @@ struct RadioView: View {
                     TVRadioStationCard(
                         item: item,
                         isPlaying: player.currentRadioStation?.id == item.id && player.isPlaying,
+                        isAdmin: isAdmin,
                         play: { player.playRadioStation(item) },
                         edit: { editingItem = item },
                         delete: { deleteItem = item }
@@ -138,11 +139,13 @@ struct RadioView: View {
         } label: {
             Label(String(localized: "edit"), systemImage: "pencil")
         }
-        Divider()
-        Button(role: .destructive) {
-            deleteItem = item
-        } label: {
-            Label(String(localized: "delete"), systemImage: "trash")
+        if isAdmin {
+            Divider()
+            Button(role: .destructive) {
+                deleteItem = item
+            } label: {
+                Label(String(localized: "delete"), systemImage: "trash")
+            }
         }
     }
 }
@@ -181,6 +184,7 @@ private struct TVRadioStationListRow<ContextMenuContent: View>: View {
 private struct TVRadioStationCard: View {
     let item: RadioStationDisplayItem
     let isPlaying: Bool
+    let isAdmin: Bool
     let play: () -> Void
     let edit: () -> Void
     let delete: () -> Void
@@ -198,8 +202,10 @@ private struct TVRadioStationCard: View {
             .buttonStyle(.card)
             .contextMenu {
                 Button(String(localized: "edit"), action: edit)
-                Divider()
-                Button(String(localized: "delete"), role: .destructive, action: delete)
+                if isAdmin {
+                    Divider()
+                    Button(String(localized: "delete"), role: .destructive, action: delete)
+                }
             }
 
             Text(item.name)
@@ -303,6 +309,18 @@ private struct TVRadioStationEditSheet: View {
     @State private var isSaving = false
     @State private var saveError: String?
 
+    // Prefilling via `init` (instead of `.onAppear`) so the first rendered frame already
+    // shows the real values — an onAppear-based prefill runs one frame late and is
+    // visible as a brief flash/glitch (e.g. the AzuraCast toggle flipping right after open).
+    init(item: RadioStationDisplayItem?) {
+        self.item = item
+        _name = State(initialValue: item?.name ?? "")
+        _streamURL = State(initialValue: item?.streamURL ?? "")
+        _useAzuraCastAPI = State(initialValue: item?.metadata.useAzuraCastAPI ?? false)
+        _azuraCastAPIURL = State(initialValue: item?.metadata.azuraCastAPIURL ?? "")
+        _showSongCover = State(initialValue: item?.metadata.showSongCover ?? true)
+    }
+
     private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var trimmedStreamURL: String { streamURL.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -339,7 +357,6 @@ private struct TVRadioStationEditSheet: View {
                 Spacer()
             }
             .padding(80)
-            .onAppear(perform: prefill)
         }
         .alert(
             String(localized: "error"),
@@ -349,15 +366,6 @@ private struct TVRadioStationEditSheet: View {
         } message: {
             Text(saveError ?? "")
         }
-    }
-
-    private func prefill() {
-        guard let item else { return }
-        name = item.name
-        streamURL = item.streamURL
-        useAzuraCastAPI = item.metadata.useAzuraCastAPI
-        azuraCastAPIURL = item.metadata.azuraCastAPIURL
-        showSongCover = item.metadata.showSongCover
     }
 
     private func save() {

@@ -82,20 +82,25 @@ struct RadioView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button {
-                withAnimation(.snappy) {
-                    if isEditingStations {
-                        isEditingStations = false
-                    } else {
-                        isGrid = false
-                        isEditingStations = true
+            // This toggle only exists to reveal per-row delete buttons — pointless (and
+            // confusing, since tapping it would visibly do nothing) for a non-admin who
+            // can never delete a station.
+            if isAdmin {
+                Button {
+                    withAnimation(.snappy) {
+                        if isEditingStations {
+                            isEditingStations = false
+                        } else {
+                            isGrid = false
+                            isEditingStations = true
+                        }
                     }
+                } label: {
+                    Image(systemName: isEditingStations ? "checkmark" : "pencil")
+                        .font(.title3)
                 }
-            } label: {
-                Image(systemName: isEditingStations ? "checkmark" : "pencil")
-                    .font(.title3)
+                .help(isEditingStations ? String(localized: "done") : String(localized: "edit"))
             }
-            .help(isEditingStations ? String(localized: "done") : String(localized: "edit"))
 
             if !isEditingStations {
                 Button {
@@ -201,10 +206,12 @@ struct RadioView: View {
         } label: {
             Label(String(localized: "edit"), systemImage: "pencil")
         }
-        Button(role: .destructive) {
-            deleteItem = item
-        } label: {
-            Label(String(localized: "delete"), systemImage: "trash")
+        if isAdmin {
+            Button(role: .destructive) {
+                deleteItem = item
+            } label: {
+                Label(String(localized: "delete"), systemImage: "trash")
+            }
         }
     }
 }
@@ -360,6 +367,19 @@ private struct MacRadioStationEditorView: View {
     @State private var isSaving = false
     @State private var saveError: String?
 
+    // Prefilling via `init` (instead of `.onAppear`) so the first rendered frame already
+    // shows the real values — an onAppear-based prefill runs one frame late, which was
+    // visible both as a toggle flipping right after open AND the window briefly opening
+    // at the wrong height (this view's frame height depends on `useAzuraCastAPI`).
+    init(item: RadioStationDisplayItem?) {
+        self.item = item
+        _name = State(initialValue: item?.name ?? "")
+        _streamURL = State(initialValue: item?.streamURL ?? "")
+        _useAzuraCastAPI = State(initialValue: item?.metadata.useAzuraCastAPI ?? false)
+        _azuraCastAPIURL = State(initialValue: item?.metadata.azuraCastAPIURL ?? "")
+        _showSongCover = State(initialValue: item?.metadata.showSongCover ?? true)
+    }
+
     private var isAdmin: Bool { serverStore.activeServer?.isAdmin ?? true }
     private var isEditing: Bool { item != nil }
     private var canSave: Bool {
@@ -426,7 +446,6 @@ private struct MacRadioStationEditorView: View {
             .padding(20)
         }
         .frame(width: 520, height: useAzuraCastAPI ? 610 : 480)
-        .onAppear(perform: prefill)
         .alert(
             String(localized: "error"),
             isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
@@ -435,15 +454,6 @@ private struct MacRadioStationEditorView: View {
         } message: {
             Text(saveError ?? "")
         }
-    }
-
-    private func prefill() {
-        guard let item else { return }
-        name = item.name
-        streamURL = item.streamURL
-        useAzuraCastAPI = item.metadata.useAzuraCastAPI
-        azuraCastAPIURL = item.metadata.azuraCastAPIURL
-        showSongCover = item.metadata.showSongCover
     }
 
     private func save() {

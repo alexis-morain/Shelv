@@ -473,6 +473,12 @@ final class RadioStationStore: ObservableObject {
               let operationMetadataServerID = activeServerId else { return false }
         guard item.metadata.serverId.isEmpty
             || item.metadata.serverId == operationMetadataServerID else { return false }
+        // Defense in depth — deleting a station is admin-only on every Subsonic server,
+        // just like creating/renaming one. The UI already hides "delete" for non-admins.
+        guard selectedServer?.isAdmin ?? true else {
+            errorMessage = String(localized: "radio_station_admin_required")
+            return false
+        }
         do {
             try await api.deleteInternetRadioStation(id: item.station.id)
             guard matchesCurrentServerContext(
