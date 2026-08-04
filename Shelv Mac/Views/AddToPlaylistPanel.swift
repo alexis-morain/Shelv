@@ -55,7 +55,7 @@ struct AddToPlaylistPanel: View {
                 // Existing playlists
                 if !nonRecapPlaylists.isEmpty {
                     Section(String(localized: "existing_playlists")) {
-                        ForEach(nonRecapPlaylists) { playlist in
+                        ForEach(Array(nonRecapPlaylists.enumerated()), id: \.element.id) { index, playlist in
                             Button {
                                 Task {
                                     let duplicateIds = await libraryStore.songIdsAlreadyInPlaylist(playlist, songIds: songIds)
@@ -91,6 +91,7 @@ struct AddToPlaylistPanel: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .listRowSeparator(index == 0 ? .hidden : .automatic, edges: .top)
                         }
                     }
                 }
@@ -99,7 +100,7 @@ struct AddToPlaylistPanel: View {
                 Section(String(localized: "create_new")) {
                     HStack {
                         TextField(String(localized: "playlist_name"), text: $newPlaylistName)
-                            .textFieldStyle(.plain)
+                            .textFieldStyle(.roundedBorder)
                         Button(String(localized: "create")) {
                             let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
                             guard !name.isEmpty else { return }
@@ -116,6 +117,7 @@ struct AddToPlaylistPanel: View {
                         .buttonStyle(.borderedProminent)
                         .tint(themeColor)
                     }
+                    .listRowSeparator(.hidden, edges: .top)
                 }
             }
             .listStyle(.inset)
