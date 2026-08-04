@@ -92,6 +92,7 @@
 /* Begin PBXFileReference section */
 		10ACD444D3F226337CB21004 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
+		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
 		BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Artist.swift; sourceTree = "<group>"; };
