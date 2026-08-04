@@ -128,15 +128,6 @@ struct SearchView: View {
                 } else {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 4) {
-                            if let songs = result?.song, !songs.isEmpty {
-                                sectionHeader(String(localized: "songs"))
-                                ForEach(Array(songs.enumerated()), id: \.element.id) { i, song in
-                                    DetailSongRow(song: song, number: i, showArtwork: true) {
-                                        commitCurrentSearch()
-                                        player.play(songs: songs, startIndex: i)
-                                    }
-                                }
-                            }
                             if let artists = result?.artist.map({
                                 $0.filter { ($0.albumCount ?? 0) > 0 }
                             }), !artists.isEmpty {
@@ -157,6 +148,15 @@ struct SearchView: View {
                                     AlbumListRow(album: album) {
                                         commitCurrentSearch()
                                         path.append(album)
+                                    }
+                                }
+                            }
+                            if let songs = result?.song, !songs.isEmpty {
+                                sectionHeader(String(localized: "songs"))
+                                ForEach(Array(songs.enumerated()), id: \.element.id) { i, song in
+                                    DetailSongRow(song: song, number: i, showArtwork: true) {
+                                        commitCurrentSearch()
+                                        player.play(songs: songs, startIndex: i)
                                     }
                                 }
                             }

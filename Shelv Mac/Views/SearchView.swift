@@ -126,32 +126,6 @@ struct SearchView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 28) {
-                        if !vm.songs.isEmpty {
-                            SearchSection(title: String(localized: "tracks")) {
-                                ForEach(vm.songs) { song in
-                                    SearchSongRow(
-                                        song: song,
-                                        showFavorite: showFavoriteActions,
-                                        showPlaylist: showPlaylistActions,
-                                        isStarred: libraryStore.isSongStarred(song)
-                                    ) {
-                                        commitCurrentSearch()
-                                        let idx = vm.songs.firstIndex(where: { $0.id == song.id }) ?? 0
-                                        appState.player.play(songs: vm.songs, startIndex: idx)
-                                    } onPlayNext: {
-                                        appState.player.addPlayNext(song)
-                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
-                                    } onAddToQueue: {
-                                        appState.player.addToQueue(song)
-                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
-                                    } onFavorite: {
-                                        Task { await libraryStore.toggleStarSong(song) }
-                                    } onAddToPlaylist: {
-                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
-                                    }
-                                }
-                            }
-                        }
                         if !vm.artists.isEmpty {
                             SearchSection(title: String(localized: "artists")) {
                                 ForEach(vm.artists) { artist in
@@ -181,6 +155,32 @@ struct SearchView: View {
                                     .buttonStyle(.plain)
                                     .albumContextMenu(album)
                                     .environmentObject(libraryStore)
+                                }
+                            }
+                        }
+                        if !vm.songs.isEmpty {
+                            SearchSection(title: String(localized: "tracks")) {
+                                ForEach(vm.songs) { song in
+                                    SearchSongRow(
+                                        song: song,
+                                        showFavorite: showFavoriteActions,
+                                        showPlaylist: showPlaylistActions,
+                                        isStarred: libraryStore.isSongStarred(song)
+                                    ) {
+                                        commitCurrentSearch()
+                                        let idx = vm.songs.firstIndex(where: { $0.id == song.id }) ?? 0
+                                        appState.player.play(songs: vm.songs, startIndex: idx)
+                                    } onPlayNext: {
+                                        appState.player.addPlayNext(song)
+                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+                                    } onAddToQueue: {
+                                        appState.player.addToQueue(song)
+                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+                                    } onFavorite: {
+                                        Task { await libraryStore.toggleStarSong(song) }
+                                    } onAddToPlaylist: {
+                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                    }
                                 }
                             }
                         }
