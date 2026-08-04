@@ -51,6 +51,7 @@
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 		BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */; };
+		D65A40B16B924F709F912515 /* ShelvCore/Services/ConcurrencyLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -98,6 +99,7 @@
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RadioStationChangeLogic.swift; sourceTree = "<group>"; };
 		D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapExpectedSongsLogic.swift; sourceTree = "<group>"; };
+		DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConcurrencyLimiter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -177,6 +179,7 @@
 				BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */,
 				C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */,
 				7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */,
+				DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */,
 				BC10012D2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift */,
 				BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */,
 				BC1001432FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift */,
@@ -438,6 +441,7 @@
 				BC1001262FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift in Sources */,
 				4B666BEAD970D72DFCFF9C7E /* ShelvCore/Services/RadioStationChangeLogic.swift in Sources */,
 				767C48F98385493A929D3CF5 /* ShelvCore/Services/PlaylistDuplicateChecker.swift in Sources */,
+				D65A40B16B924F709F912515 /* ShelvCore/Services/ConcurrencyLimiter.swift in Sources */,
 				BC10012C2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift in Sources */,
 				BC1001402FFE000000000001 /* ShelvCore/Services/ArtworkLoadRequestTracker.swift in Sources */,
 				BC1001072FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift in Sources */,

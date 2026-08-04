@@ -1,4 +1,5 @@
 import UIKit
+import ImageIO
 
 actor ImageCacheService {
     static let shared = ImageCacheService()
@@ -10,11 +11,16 @@ actor ImageCacheService {
     private var writesSinceTrim = 0
     private var activeDownloads = 0
     private var downloadWaitQueue: [CheckedContinuation<Void, Never>] = []
-
     private static let diskLimitBytes = 1_073_741_824 // 1 GB
     private static let diskTrimTarget  = 900 * 1024 * 1024 // 900 MB (hysteresis)
     private static let writesPerTrimCheck = 20
     private static let maxConcurrentDownloads = 6
+    // Bounds how many local artwork files can be decoded at once. Without this, fast-
+    // scrolling through a grid of many already-downloaded albums fires one decode Task
+    // per cell almost simultaneously; combined with un-downsampled decodes of large
+    // embedded cover art this could spike memory enough to trigger a jetsam kill.
+    private static let maxConcurrentLocalDecodes = 4
+    private let localDecodeLimiter = ConcurrencyLimiter(maxConcurrent: ImageCacheService.maxConcurrentLocalDecodes)
     private static let defaultFallbackSizes = [600, 300, 240, 200, 192, 180, 160, 156, 150, 120, 100, 80, 50]
     private static let fallbackSizesByPreferred: [Int: [Int]] = Dictionary(
         uniqueKeysWithValues: defaultFallbackSizes.map { preferred in
@@ -87,6 +93,22 @@ actor ImageCacheService {
             return (candidate, img)
         }
         return nil
+    }
+
+    /// Decodes a locally downloaded artwork file, downsampled to `maxPixelSize` and
+    /// concurrency-limited, so scrolling fast through many already-downloaded albums can't
+    /// spike memory the way full-resolution `UIImage(contentsOfFile:)` decodes would.
+    func localImage(path: String, key: String, maxPixelSize: Int) async -> UIImage? {
+        if let hit = memory.object(forKey: key as NSString) { return hit }
+        await localDecodeLimiter.acquire()
+        let img = await Task.detached(priority: .medium) {
+            Self.downsampledImage(contentsOfFile: path, maxPixelSize: maxPixelSize)
+        }.value
+        await localDecodeLimiter.release()
+        guard let img else { return nil }
+        let cost = Int(img.size.width * img.size.height * 4)
+        memory.setObject(img, forKey: key as NSString, cost: cost)
+        return img
     }
 
     func image(url: URL, key: String) async -> UIImage? {
@@ -201,6 +223,22 @@ actor ImageCacheService {
             }
         }
         return nil
+    }
+
+    /// Uses ImageIO's thumbnail generation instead of `UIImage(contentsOfFile:)` so the
+    /// decoder never materializes the full-resolution source bitmap in memory — critical
+    /// for locally embedded cover art, which can be several thousand pixels per side.
+    nonisolated private static func downsampledImage(contentsOfFile path: String, maxPixelSize: Int) -> UIImage? {
+        let url = URL(fileURLWithPath: path)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 
     nonisolated private static func isSuccessfulImageResponse(_ response: URLResponse) -> Bool {

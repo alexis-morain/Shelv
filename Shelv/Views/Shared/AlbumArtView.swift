@@ -137,13 +137,10 @@ struct AlbumArtView: View {
         if uiImage == nil { loading = true }
 
         if let localPath = LocalArtworkIndex.shared.localPath(for: id) {
-            let loaded: UIImage? = await Task.detached(priority: .medium) {
-                UIImage(contentsOfFile: localPath)
-            }.value
+            let loaded = await ImageCacheService.shared.localImage(path: localPath, key: key, maxPixelSize: size)
             guard loadRequest.accepts(expectedLoadIdentifier) else { return }
-            if let img = loaded {
-                ImageCacheService.shared.cache(img, key: key)
-                apply(img, for: expectedLoadIdentifier)
+            if let loaded {
+                apply(loaded, for: expectedLoadIdentifier)
                 return
             }
         }
