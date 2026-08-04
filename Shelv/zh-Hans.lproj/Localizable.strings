@@ -145,6 +145,11 @@
 "clear_search_history" = "清除搜索记录";
 "new_playlist" = "新建播放列表…";
 "add_to_playlist_2" = "添加到播放列表";
+"song_already_in_playlist_title" = "已在播放列表中";
+"song_already_in_playlist_message" = "这首歌曲已经在此播放列表中。";
+"songs_already_in_playlist_message_format" = "%d 首歌曲已经在此播放列表中。";
+"discard" = "放弃";
+"add_anyway" = "仍然添加";
 "my_playlist" = "我的播放列表";
 "new_playlist_2" = "新建播放列表";
 "create_add" = "创建并添加";

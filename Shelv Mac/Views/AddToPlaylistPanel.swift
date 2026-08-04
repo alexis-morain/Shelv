@@ -1,5 +1,19 @@
 import SwiftUI
 
+private struct DuplicateSongsPrompt: Identifiable {
+    let id: String
+    let playlist: Playlist
+    let songIds: [String]
+    let duplicateIds: Set<String>
+
+    init(playlist: Playlist, songIds: [String], duplicateIds: Set<String>) {
+        self.id = playlist.id
+        self.playlist = playlist
+        self.songIds = songIds
+        self.duplicateIds = duplicateIds
+    }
+}
+
 struct AddToPlaylistPanel: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     let songIds: [String]
@@ -9,6 +23,8 @@ struct AddToPlaylistPanel: View {
     @Environment(\.themeColor) private var themeColor
 
     @State private var newPlaylistName = ""
+    @State private var showDuplicatePrompt = false
+    @State private var duplicatePrompt: DuplicateSongsPrompt?
 
     private var nonRecapPlaylists: [Playlist] {
         recapEnabled
@@ -42,8 +58,14 @@ struct AddToPlaylistPanel: View {
                         ForEach(nonRecapPlaylists) { playlist in
                             Button {
                                 Task {
-                                    let success = await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
-                                    if success { dismiss() }
+                                    let duplicateIds = await libraryStore.songIdsAlreadyInPlaylist(playlist, songIds: songIds)
+                                    if duplicateIds.isEmpty {
+                                        let success = await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
+                                        if success { dismiss() }
+                                    } else {
+                                        duplicatePrompt = DuplicateSongsPrompt(playlist: playlist, songIds: songIds, duplicateIds: duplicateIds)
+                                        showDuplicatePrompt = true
+                                    }
                                 }
                             } label: {
                                 HStack(spacing: 12) {
@@ -103,6 +125,30 @@ struct AddToPlaylistPanel: View {
             if libraryStore.playlists.isEmpty {
                 await libraryStore.loadPlaylists()
             }
+        }
+        .alert(
+            String(localized: "song_already_in_playlist_title"),
+            isPresented: $showDuplicatePrompt,
+            presenting: duplicatePrompt
+        ) { prompt in
+            Button(String(localized: "discard"), role: .cancel) {
+                let remaining = prompt.songIds.filter { !prompt.duplicateIds.contains($0) }
+                guard !remaining.isEmpty else { return }
+                Task {
+                    let success = await libraryStore.addSongsToPlaylist(prompt.playlist, songIds: remaining)
+                    if success { dismiss() }
+                }
+            }
+            Button(String(localized: "add_anyway")) {
+                Task {
+                    let success = await libraryStore.addSongsToPlaylist(prompt.playlist, songIds: prompt.songIds)
+                    if success { dismiss() }
+                }
+            }
+        } message: { prompt in
+            Text(prompt.duplicateIds.count == 1
+                 ? String(localized: "song_already_in_playlist_message")
+                 : String(format: String(localized: "songs_already_in_playlist_message_format"), prompt.duplicateIds.count))
         }
     }
 }

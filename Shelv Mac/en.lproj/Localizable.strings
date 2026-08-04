@@ -89,6 +89,11 @@
 "import_finished" = "Import finished";
 "all_playlists_up_to_date" = "All playlists up to date";
 "add_to_playlist_2" = "Add to Playlist";
+"song_already_in_playlist_title" = "Already in Playlist";
+"song_already_in_playlist_message" = "This song is already in this playlist.";
+"songs_already_in_playlist_message_format" = "%d songs are already in this playlist.";
+"discard" = "Discard";
+"add_anyway" = "Add Anyway";
 "existing_playlists" = "Existing Playlists";
 "create_new" = "Create New";
 "playlist_name" = "Playlist name";
