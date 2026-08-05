@@ -100,6 +100,9 @@ struct ShelvApp: App {
                     guard revision == serverStore.activeServerRevision else { return }
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
+                    // Siri is only useful once a server exists, and SiriKit
+                    // delivers nothing until access has been granted.
+                    SiriMediaAppSelectionService.shared.requestAuthorizationIfNeeded()
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
                     _ = await MusicLibraryStore.shared.prepareActiveServer(forceRefresh: true)
                     guard !Task.isCancelled,
@@ -237,6 +240,9 @@ struct ShelvApp: App {
                     updateIdleTimer(phase: phase)
                     guard phase == .active else { return }
                     ShelvAppShortcuts.updateAppShortcutParameters()
+                    // Cheap, and it repairs the media signal if the library
+                    // chain below was cut short or a server was just added.
+                    SiriMediaAppSelectionService.shared.restoreUserContext()
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task(priority: .utility) {
                         await BackgroundWorkCoordinator.shared.run(.cloudSync) {

@@ -757,6 +757,7 @@ class AudioPlayerService: ObservableObject {
         let resolvedItem = RadioStationStore.shared.items.first(where: { $0.id == item.id }) ?? item
         playRadioStation(resolvedItem, resetReconnectAttempts: true)
         #if os(iOS) || os(tvOS)
+        SiriMediaAppSelectionService.shared.updateNowPlayingRelevance(station: resolvedItem)
         SiriMediaAppSelectionService.shared.prepareRadioDonation(
             station: resolvedItem,
             generation: playbackGeneration
@@ -1564,6 +1565,11 @@ class AudioPlayerService: ObservableObject {
             to: song,
             startsNewTrackingSession: startsNewTrackingSession
         )
+        #if os(iOS) || os(tvOS)
+        // Every track passes through here, including queue advances, so the
+        // assistant's "this song" always refers to what is actually playing.
+        SiriMediaAppSelectionService.shared.updateNowPlayingRelevance(song: song)
+        #endif
         let activeServer = SubsonicAPIService.shared.activeServer
         let expectedServerConfigId = startsNewTrackingSession
             ? activeServer?.id.uuidString

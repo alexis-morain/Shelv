@@ -33,6 +33,33 @@ nonisolated enum ShortcutQueuePlacement: Hashable, Sendable {
     case tail
 }
 
+/// How long the caller may take to answer the system before its own watchdog
+/// fires. Streaming a track from a self-hosted server regularly takes longer
+/// than that, so the answer deadline is deliberately separate from the work
+/// itself: playback keeps running after the deadline instead of being aborted.
+nonisolated enum ShortcutIntentBudget: Hashable, Sendable {
+    /// Classic SiriKit allows roughly ten seconds per resolve/confirm/handle
+    /// phase. Answering later makes Siri announce a failure over music that is
+    /// already on its way, which is exactly the wrong feedback.
+    case siriKit
+    /// App Intents allow roughly thirty seconds per `perform()`.
+    case appIntent
+
+    var responseDeadline: Duration {
+        switch self {
+        case .siriKit: .seconds(7)
+        case .appIntent: .seconds(22)
+        }
+    }
+
+    var diagnosticName: String {
+        switch self {
+        case .siriKit: "siriKit"
+        case .appIntent: "appIntent"
+        }
+    }
+}
+
 nonisolated protocol ShortcutRemoteErrorClassifying: Error {
     var shortcutPlaybackError: ShortcutPlaybackError { get }
 }
@@ -117,6 +144,43 @@ nonisolated enum ShelvIntentDiagnostics {
         logger.notice("System intent received route=\(route, privacy: .public)")
     }
 
+    static func siriKitConfirmed(hasServer: Bool) {
+        logger.notice(
+            "SiriKit confirm hasServer=\(hasServer, privacy: .public) code=\(hasServer ? "ready" : "failureRequiringAppLaunch", privacy: .public)"
+        )
+    }
+
+    /// What Siri actually asked for, after Shelv flattened the media search into
+    /// one catalog query. The first thing to check when a spoken request fails.
+    static func siriKitRequest(
+        mediaType: Int,
+        query: String,
+        artist: String?,
+        album: String?
+    ) {
+        #if DEBUG
+        logger.notice(
+            "SiriKit request mediaType=\(mediaType, privacy: .public) query=\(query, privacy: .public) artist=\(artist ?? "none", privacy: .public) album=\(album ?? "none", privacy: .public)"
+        )
+        #else
+        logger.notice(
+            "SiriKit request mediaType=\(mediaType, privacy: .public) queryLength=\(query.count, privacy: .public) hasArtist=\(artist != nil, privacy: .public)"
+        )
+        #endif
+    }
+
+    static func siriKitResolved(candidateCount: Int, matchCount: Int, chosen: String?) {
+        #if DEBUG
+        logger.notice(
+            "SiriKit resolved candidates=\(candidateCount, privacy: .public) matches=\(matchCount, privacy: .public) chosen=\(chosen ?? "none", privacy: .public)"
+        )
+        #else
+        logger.notice(
+            "SiriKit resolved candidates=\(candidateCount, privacy: .public) matches=\(matchCount, privacy: .public)"
+        )
+        #endif
+    }
+
     static func began(action: String, reference: ShortcutPlayableReference? = nil) {
         logger.notice(
             "Intent began action=\(action, privacy: .public) kind=\(reference?.kind.rawValue ?? "none", privacy: .public) item=\(reference?.contentID ?? "none", privacy: .private(mask: .hash))"
@@ -130,6 +194,12 @@ nonisolated enum ShelvIntentDiagnostics {
     static func failed(action: String, error: ShortcutPlaybackError) {
         logger.error(
             "Intent failed action=\(action, privacy: .public) error=\(String(describing: error), privacy: .public)"
+        )
+    }
+
+    static func answeredWhileStarting(action: String, budget: ShortcutIntentBudget) {
+        logger.notice(
+            "Intent answered before playback confirmed action=\(action, privacy: .public) budget=\(budget.diagnosticName, privacy: .public)"
         )
     }
 
@@ -250,6 +320,24 @@ nonisolated enum ShelvIntentDiagnostics {
         )
     }
 
+    static func queueWarmed(kind: ShortcutPlayableKind, trackCount: Int) {
+        logger.notice(
+            "Queue warmed kind=\(kind.rawValue, privacy: .public) trackCount=\(trackCount, privacy: .public)"
+        )
+    }
+
+    static func warmedQueueUsed(trackCount: Int) {
+        logger.notice(
+            "Warmed queue reused trackCount=\(trackCount, privacy: .public)"
+        )
+    }
+
+    static func libraryEdit(action: String, kind: ShortcutPlayableKind, count: Int) {
+        logger.notice(
+            "Library edit action=\(action, privacy: .public) kind=\(kind.rawValue, privacy: .public) count=\(count, privacy: .public)"
+        )
+    }
+
     static func instantMixBuilt(kind: ShortcutPlayableKind, trackCount: Int) {
         logger.notice(
             "Instant Mix built kind=\(kind.rawValue, privacy: .public) trackCount=\(trackCount, privacy: .public)"
@@ -274,6 +362,8 @@ nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
     case unavailableOffline
     case radioUnavailableOffline
     case unsupportedQueueOperation
+    case unsupportedLibraryEdit
+    case alreadyInPlaylist
     case playbackFailed
     case playbackTimedOut
     case cancelled
@@ -289,6 +379,8 @@ nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
         case .unavailableOffline: return "shortcut_error_unavailable_offline"
         case .radioUnavailableOffline: return "shortcut_error_radio_offline"
         case .unsupportedQueueOperation: return "shortcut_error_unsupported_queue_operation"
+        case .unsupportedLibraryEdit: return "shortcut_error_unsupported_library_edit"
+        case .alreadyInPlaylist: return "shortcut_error_already_in_playlist"
         case .playbackFailed: return "shortcut_error_playback_failed"
         case .playbackTimedOut: return "shortcut_error_playback_timed_out"
         case .cancelled: return "shortcut_error_cancelled"

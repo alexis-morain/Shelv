@@ -45,10 +45,19 @@ final class ShelvSiriMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
         intent: INPlayMediaIntent,
         completion: @escaping (INPlayMediaIntentResponse) -> Void
     ) {
-        let code: INPlayMediaIntentResponseCode = ServerStore.shared.activeServer == nil
-            ? .failureRequiringAppLaunch
-            : .ready
-        completion(INPlayMediaIntentResponse(code: code, userActivity: nil))
+        Task { @MainActor in
+            // Siri launches Shelv in the background for this, so the server
+            // store is still loading from disk. Reading `activeServer` right
+            // away reported "no server" for a perfectly configured app and
+            // failed the request before any search happened.
+            await ServerStore.shared.waitUntilReady()
+            let hasServer = ServerStore.shared.activeServer != nil
+            let code: INPlayMediaIntentResponseCode = hasServer
+                ? .ready
+                : .failureRequiringAppLaunch
+            ShelvIntentDiagnostics.siriKitConfirmed(hasServer: hasServer)
+            completion(INPlayMediaIntentResponse(code: code, userActivity: nil))
+        }
     }
 
     func handle(
@@ -97,6 +106,12 @@ final class ShelvSiriMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
 
         let request = ShelvSiriMediaRequest(intent: intent)
         let query = request.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        ShelvIntentDiagnostics.siriKitRequest(
+            mediaType: request.mediaTypeRawValue,
+            query: query,
+            artist: request.artistName,
+            album: request.albumName
+        )
 
         if query.isEmpty {
             guard let payload = payloadForQuerylessRequest(request) else { return [] }
@@ -124,6 +139,11 @@ final class ShelvSiriMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
         let matches = ShelvIntentCatalog.deterministicPlaybackMatches(
             candidates,
             query: query
+        )
+        ShelvIntentDiagnostics.siriKitResolved(
+            candidateCount: candidates.count,
+            matchCount: matches.count,
+            chosen: matches.first.map { "\($0.reference.kind.rawValue):\($0.title)" }
         )
         let placement = queuePlacement(for: request)
         let repeats = request.playbackRepeatModeRawValue != INPlaybackRepeatMode.none.rawValue
@@ -181,19 +201,29 @@ final class ShelvSiriMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
                 reference,
                 order: order,
                 placement: placement,
-                repeats: payload.repeats
+                repeats: payload.repeats,
+                budget: .siriKit
             )
         case .instantMix:
             guard let reference = payload.reference else {
                 throw ShortcutPlaybackError.notFound
             }
-            try await ShelvSystemIntentPlaybackService.shared.execute(.instantMix(reference))
+            try await ShelvSystemIntentPlaybackService.shared.execute(
+                .instantMix(reference),
+                budget: .siriKit
+            )
         case .mix:
             guard let mix = payload.mix else { throw ShortcutPlaybackError.notFound }
-            try await ShelvSystemIntentPlaybackService.shared.execute(.mix(mix))
+            try await ShelvSystemIntentPlaybackService.shared.execute(
+                .mix(mix),
+                budget: .siriKit
+            )
         case .resume:
             if !AudioPlayerService.shared.isPlaying {
-                try await ShelvSystemIntentPlaybackService.shared.execute(.playPause)
+                try await ShelvSystemIntentPlaybackService.shared.execute(
+                    .playPause,
+                    budget: .siriKit
+                )
             }
         }
     }

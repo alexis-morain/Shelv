@@ -836,6 +836,9 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     static let description = IntentDescription("shortcut_media_play_description")
     static let openAppWhenRun = false
     static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    // Stated explicitly, like every other media schema intent: a playback
+    // request must never pull Shelv into the foreground.
+    static let supportedModes: IntentModes = .background
 
     @Parameter(title: "shortcut_playable_parameter")
     var audioEntity: ShelvAudioEntity
@@ -843,6 +846,9 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     @Parameter(title: "shortcut_playback_attributes_parameter", default: [])
     var playbackAttributes: Set<ShelvAudioPlaybackAttribute>
 
+    /// Required by the schema. The prepared tracks are looked up by reference in
+    /// ``ShelvSystemIntentPlaybackService`` rather than carried in this token,
+    /// so it stays an opaque acknowledgement of ``ShelvWarmupAudioQueueIntent``.
     var warmupAudioQueueResult: ShelvAudioWarmupResult?
 
     @Parameter(title: "shortcut_queue_location_parameter")

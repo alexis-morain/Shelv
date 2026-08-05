@@ -85,23 +85,35 @@ enum TVSiriMediaPlaybackRouter {
         if query.isEmpty {
             if request.mediaReferenceRawValue == INMediaReference.currentlyPlaying.rawValue {
                 if !AudioPlayerService.shared.isPlaying {
-                    try await ShelvSystemIntentPlaybackService.shared.execute(.playPause)
+                    try await ShelvSystemIntentPlaybackService.shared.execute(
+                        .playPause,
+                        budget: .siriKit
+                    )
                 }
                 return
             }
             switch INMediaSortOrder(rawValue: request.sortOrderRawValue) ?? .unknown {
             case .newest:
-                try await ShelvSystemIntentPlaybackService.shared.execute(.mix(.newest))
+                try await ShelvSystemIntentPlaybackService.shared.execute(
+                    .mix(.newest),
+                    budget: .siriKit
+                )
                 return
             case .best, .popular, .trending, .recommended:
-                try await ShelvSystemIntentPlaybackService.shared.execute(.mix(.frequent))
+                try await ShelvSystemIntentPlaybackService.shared.execute(
+                    .mix(.frequent),
+                    budget: .siriKit
+                )
                 return
             default:
                 if request.sortOrderRawValue != INMediaSortOrder.unknown.rawValue {
                     throw ShortcutPlaybackError.notFound
                 }
                 if request.playShuffled || request.mediaType == .music {
-                    try await ShelvSystemIntentPlaybackService.shared.execute(.mix(.shuffleAll))
+                    try await ShelvSystemIntentPlaybackService.shared.execute(
+                        .mix(.shuffleAll),
+                        budget: .siriKit
+                    )
                     return
                 }
                 throw ShortcutPlaybackError.notFound
@@ -111,7 +123,10 @@ enum TVSiriMediaPlaybackRouter {
         // Siri may encode a named mix either as a native sort order or as the
         // media name. Both representations must execute the same Shelv action.
         if let mix = ShelvSmartMixIntentVocabulary.smartMix(for: query) {
-            try await ShelvSystemIntentPlaybackService.shared.execute(.mix(mix))
+            try await ShelvSystemIntentPlaybackService.shared.execute(
+                .mix(mix),
+                budget: .siriKit
+            )
             return
         }
 
@@ -129,7 +144,10 @@ enum TVSiriMediaPlaybackRouter {
         guard let match = matches.first else { throw ShortcutPlaybackError.notFound }
 
         if isInstantMixType(request.mediaType) {
-            try await ShelvSystemIntentPlaybackService.shared.execute(.instantMix(match.reference))
+            try await ShelvSystemIntentPlaybackService.shared.execute(
+                .instantMix(match.reference),
+                budget: .siriKit
+            )
             return
         }
 
@@ -146,7 +164,8 @@ enum TVSiriMediaPlaybackRouter {
             match.reference,
             order: order,
             placement: placement,
-            repeats: repeats
+            repeats: repeats,
+            budget: .siriKit
         )
     }
 

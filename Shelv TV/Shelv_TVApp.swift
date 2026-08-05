@@ -49,6 +49,9 @@ struct Shelv_TVApp: App {
                     guard revision == serverStore.activeServerRevision else { return }
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
+                    // Siri is only useful once a server exists, and SiriKit
+                    // delivers nothing until access has been granted.
+                    SiriMediaAppSelectionService.shared.requestAuthorizationIfNeeded()
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
                     _ = await MusicLibraryStore.shared.prepareActiveServer(forceRefresh: true)
                     guard !Task.isCancelled,

@@ -18,6 +18,12 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<!-- The forum-documented workaround has to be present on the extension too,
+	     otherwise the system declines to load it for INPlayMediaIntent. -->
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Shelv needs media access so Siri can start playback from your library.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>Use Siri to play music from your Shelv library.</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>

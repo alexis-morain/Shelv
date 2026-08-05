@@ -12,7 +12,13 @@
 			<key>INAlternativeAppName</key>
 			<string>Shelf</string>
 			<key>INAlternativeAppNamePronunciationHint</key>
-			<string>shelf</string>
+			<string>Shelf</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Shells</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Shells</string>
 		</dict>
 	</array>
 	<key>INIntentsSupported</key>
@@ -24,6 +30,12 @@
 		<string>INMediaCategoryMusic</string>
 		<string>INMediaCategoryRadio</string>
 	</array>
+	<!-- Undocumented but required: without NSAppleMusicUsageDescription the
+	     system does not load an INPlayMediaIntent handler, even though Shelv
+	     never touches the Apple Music library. Siri answers that it cannot play
+	     anything from the app. See Apple Developer Forums thread 124605. -->
+	<key>NSAppleMusicUsageDescription</key>
+	<string>Shelv needs media access so Siri can start playback from your library.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Shelv uses your local network to connect to your Navidrome server.</string>
 	<key>NSSiriUsageDescription</key>

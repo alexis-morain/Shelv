@@ -1,7 +1,12 @@
 import AppIntents
 import Foundation
 
-struct ShelvPlaylistEntity: AppEntity, Identifiable {
+/// Playlist picker for the dedicated "Play Playlist" action. Its identifiers
+/// stay bare Navidrome playlist IDs so shortcuts people already configured keep
+/// working, while lookup and search go through ``ShelvIntentCatalog`` like every
+/// other Siri and Shortcuts route. That shared boundary is what makes offline
+/// fallbacks, server scoping and match ranking behave identically everywhere.
+struct ShelvPlaylistEntity: AppEntity, Identifiable, Hashable, Sendable {
     let id: String
     let name: String
     let songCount: Int?
@@ -10,76 +15,46 @@ struct ShelvPlaylistEntity: AppEntity, Identifiable {
     static let defaultQuery = ShelvPlaylistQuery()
 
     var displayRepresentation: DisplayRepresentation {
-        if let songCount {
-            DisplayRepresentation(
-                title: "\(name)",
-                subtitle: "\(String(format: String(localized: "shortcut_track_count_format"), songCount))"
-            )
-        } else {
-            DisplayRepresentation(title: "\(name)")
-        }
+        DisplayRepresentation(
+            title: "\(name)",
+            subtitle: songCount.map {
+                "\(String(format: String(localized: "shortcut_track_count_format"), $0))"
+            },
+            image: .init(systemName: "music.note.list"),
+            synonyms: ["\(name) playlist", "playlist \(name)"]
+        )
+    }
+
+    init(item: ShelvIntentCatalogItem) {
+        id = item.reference.contentID
+        name = item.title
+        songCount = item.itemCount
     }
 }
 
 struct ShelvPlaylistQuery: EntityStringQuery {
     func entities(for identifiers: [ShelvPlaylistEntity.ID]) async throws -> [ShelvPlaylistEntity] {
-        let playlists = await fetchPlaylists()
-        let requested = Set(identifiers)
-        return playlists.filter { requested.contains($0.id) }
+        try await ShelvIntentCatalog.shared
+            .items(for: identifiers, kind: .playlist)
+            .map(ShelvPlaylistEntity.init)
     }
 
     func suggestedEntities() async throws -> [ShelvPlaylistEntity] {
-        Array(await fetchPlaylists().prefix(25))
+        try await ShelvIntentCatalog.shared
+            .suggestedItems(limit: 25, allowedKinds: [.playlist])
+            .map(ShelvPlaylistEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvPlaylistEntity] {
-        let query = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return try await suggestedEntities() }
-        return await fetchPlaylists().filter {
-            $0.name.localizedCaseInsensitiveContains(query)
-        }
-    }
-
-    @MainActor
-    private func fetchPlaylists() async -> [ShelvPlaylistEntity] {
-        if SubsonicAPIService.shared.activeServer == nil {
-            _ = ServerStore.shared
-        }
-        let store = LibraryStore.shared
-        await store.loadShortcutCaches()
-        let hasCachedPlaylists = !store.playlists.isEmpty
-        let canRefresh: Bool
-        if OfflineModeService.shared.isOffline {
-            canRefresh = false
-        } else {
-            canRefresh = await NetworkStatus.shared.waitUntilNetworkAvailable()
-        }
-        if !hasCachedPlaylists, canRefresh {
-            await store.loadPlaylists()
-        } else if hasCachedPlaylists, canRefresh {
-            Task { @MainActor in
-                await store.loadPlaylists()
-                ShelvAppShortcuts.updateAppShortcutParameters()
-            }
-        }
-        let playlists = store.playlists
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            .map {
-                ShelvPlaylistEntity(id: $0.id, name: $0.name, songCount: $0.songCount)
-            }
-        print("[Shortcuts] Playlists available → \(playlists.count)")
-        return playlists
+        try await ShelvIntentCatalog.shared
+            .items(matching: string, kind: .playlist, limit: 25)
+            .map(ShelvPlaylistEntity.init)
     }
 }
 
-struct ShelvPlayPauseIntent: AppIntent, AudioPlaybackIntent {
+struct ShelvPlayPauseIntent: ShelvBackgroundPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_pause_title"
     static let description = IntentDescription("shortcut_play_pause_description")
-    static let openAppWhenRun = false
-    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-
-    @available(iOS 26.0, *)
-    static let supportedModes: IntentModes = .background
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
@@ -89,14 +64,11 @@ struct ShelvPlayPauseIntent: AppIntent, AudioPlaybackIntent {
     }
 }
 
-struct ShelvNextTrackIntent: AppIntent, AudioPlaybackIntent {
+// Siri routes spoken "next"/"previous" through MPRemoteCommandCenter, which
+// Shelv already answers. These stay as Shortcuts actions for automations.
+struct ShelvNextTrackIntent: ShelvBackgroundPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_next_title"
     static let description = IntentDescription("shortcut_next_description")
-    static let openAppWhenRun = false
-    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-
-    @available(iOS 26.0, *)
-    static let supportedModes: IntentModes = .background
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
@@ -106,14 +78,9 @@ struct ShelvNextTrackIntent: AppIntent, AudioPlaybackIntent {
     }
 }
 
-struct ShelvPreviousTrackIntent: AppIntent, AudioPlaybackIntent {
+struct ShelvPreviousTrackIntent: ShelvBackgroundPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_previous_title"
     static let description = IntentDescription("shortcut_previous_description")
-    static let openAppWhenRun = false
-    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-
-    @available(iOS 26.0, *)
-    static let supportedModes: IntentModes = .background
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
@@ -123,52 +90,50 @@ struct ShelvPreviousTrackIntent: AppIntent, AudioPlaybackIntent {
     }
 }
 
-struct ShelvPlayPlaylistIntent: AppIntent, AudioPlaybackIntent {
+struct ShelvPlayPlaylistIntent: ShelvBackgroundPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_play_playlist_title"
     static let description = IntentDescription("shortcut_play_playlist_description")
-    static let openAppWhenRun = false
-    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-
-    @available(iOS 26.0, *)
-    static let supportedModes: IntentModes = .background
 
     @Parameter(title: "shortcut_playlist_parameter")
     var playlist: ShelvPlaylistEntity
 
-    @Parameter(title: "shortcut_play_text_mode_parameter")
-    var order: ShelvTextPlaybackChoice?
+    @Parameter(title: "shortcut_order_parameter", default: .inOrder)
+    var order: ShortcutPlaybackOrder
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("shortcut_play_playlist_summary") {
+            \.$playlist
+            \.$order
+        }
+    }
+
+    @MainActor
     func perform() async throws -> some IntentResult {
-        guard let server = await MainActor.run(body: { ServerStore.shared.activeServer }) else {
+        // Running from Siri or an automation launches Shelv in the background,
+        // where the server store is still loading. Reading it straight away
+        // would report "no server" for a configured app.
+        await ServerStore.shared.waitUntilReady()
+        guard let server = ServerStore.shared.activeServer else {
             throw ShortcutPlaybackError.noActiveServer
         }
+        // The entity carries a bare playlist ID, so it is scoped to whichever
+        // server is active now. A playlist from a different server simply is
+        // not found, which the playback service reports accurately.
         let reference = ShortcutPlayableReference(
             serverConfigID: server.id.uuidString,
             kind: .playlist,
             contentID: playlist.id
         )
-
-        let resolvedOrder: ShortcutPlaybackOrder
-        if let order {
-            resolvedOrder = order.playbackOrder
-        } else {
-            let choice = try await $order.requestDisambiguation(
-                among: [.play, .shuffle],
-                dialog: "shortcut_play_or_shuffle_dialog"
-            )
-            resolvedOrder = choice.playbackOrder
-        }
-
-        try await playback.execute(.playable(reference, order: resolvedOrder))
+        try await playback.execute(.playable(reference, order: order))
         return .result()
     }
 }
 
 @MainActor
 private func requestShortcutDestination(_ destination: ShelvShortcutDestination) {
-    print("[Shortcuts] Request → \(destination.rawValue)")
+    ShelvIntentDiagnostics.received(route: "appShortcut.open.\(destination.rawValue)")
     ShelvShortcutHandoff.request(destination)
 }
 
@@ -231,6 +196,11 @@ struct ShelvOpenRecapIntent: AppIntent {
 struct ShelvAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
+    /// A provider may publish at most ten App Shortcuts, and this list is
+    /// already at that ceiling — adding an eleventh fails the build. Spoken
+    /// transport commands ("next", "pause") and spoken shuffle requests do not
+    /// need a slot: the first arrive through MPRemoteCommandCenter, the second
+    /// through the media routes (the iOS 27 audio schema and SiriKit below).
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: ShelvShuffleAllIntent(),

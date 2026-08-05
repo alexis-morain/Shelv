@@ -41,14 +41,46 @@ final class SiriMediaAppSelectionService {
         systemIntentDepth = max(0, systemIntentDepth - 1)
     }
 
-    func restoreUserContext() {
-        guard let count = UserDefaults.standard.object(
-            forKey: libraryItemCountDefaultsKey
-        ) as? Int else {
-            logger.notice("Media user context unavailable until library load")
+    var authorizationStatus: INSiriAuthorizationStatus {
+        INPreferences.siriAuthorizationStatus()
+    }
+
+    /// Asks for Siri access, which SiriKit requires before it hands a media
+    /// request to the app at all.
+    ///
+    /// Without this call the status stays `.notDetermined`: iOS never shows the
+    /// prompt, no Siri switch appears in Shelv's settings, and every spoken
+    /// playback request fails before it ever reaches this process. App Shortcuts
+    /// are unaffected, which is why opening the app by voice always worked while
+    /// "play something in Shelv" did not.
+    func requestAuthorizationIfNeeded() {
+        let status = INPreferences.siriAuthorizationStatus()
+        guard status == .notDetermined else {
+            logger.notice("Siri authorization status=\(status.rawValue, privacy: .public)")
             return
         }
-        publishUserContext(numberOfLibraryItems: count, source: "restored")
+        let logger = self.logger
+        INPreferences.requestSiriAuthorization { resolved in
+            logger.notice(
+                "Siri authorization resolved status=\(resolved.rawValue, privacy: .public)"
+            )
+        }
+    }
+
+    /// Announces Shelv as a media app on every launch, before any library work.
+    ///
+    /// This must not wait for the library: publishing it is what makes Siri
+    /// consider Shelv for playback at all. The refined count follows later, but
+    /// on a fresh install — or whenever the library chain is cut short by a slow
+    /// server or a cancelled task — this is the only signal Siri gets.
+    func restoreUserContext() {
+        let count = UserDefaults.standard.object(
+            forKey: libraryItemCountDefaultsKey
+        ) as? Int
+        publishUserContext(
+            numberOfLibraryItems: count ?? 0,
+            source: count == nil ? "launch" : "restored"
+        )
     }
 
     func updateUserContext(numberOfLibraryItems: Int) {
@@ -70,13 +102,18 @@ final class SiriMediaAppSelectionService {
 
     private func publishUserContext(numberOfLibraryItems: Int, source: String) {
         let context = INMediaUserContext()
-        // Shelv doesn't sell a media subscription. The library-size signal is
-        // accurate; claiming a subscription here would misuse Apple's API.
-        context.subscriptionStatus = .unknown
+        // subscriptionStatus describes whether this person can play content in
+        // the app — not whether the app sells a subscription. With a server
+        // configured they can play their whole library, and saying so is what
+        // lets Siri pick Shelv over Apple Music. Reporting `.unknown` here made
+        // Siri treat Shelv as an app with no usable catalog.
+        context.subscriptionStatus = SubsonicAPIService.shared.activeServer == nil
+            ? .notSubscribed
+            : .subscribed
         context.numberOfLibraryItems = numberOfLibraryItems
         context.becomeCurrent()
         logger.notice(
-            "Media user context published source=\(source, privacy: .public) items=\(numberOfLibraryItems, privacy: .public)"
+            "Media user context published source=\(source, privacy: .public) items=\(numberOfLibraryItems, privacy: .public) subscribed=\(SubsonicAPIService.shared.activeServer != nil, privacy: .public)"
         )
     }
 
@@ -257,6 +294,85 @@ final class SiriMediaAppSelectionService {
         }
 
         return nil
+    }
+
+    /// Publishes the track that just started as the now-playing audio entity.
+    /// Called for every track, whoever started it — an entity that lags behind
+    /// the queue would make "add this song to my playlist" hit the wrong song.
+    func updateNowPlayingRelevance(song: Song) {
+        guard let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString else {
+            return
+        }
+        let item = ShelvIntentCatalogItem(
+            reference: ShortcutPlayableReference(
+                serverConfigID: serverConfigID,
+                kind: .song,
+                contentID: song.id
+            ),
+            title: song.title,
+            artistID: song.artistId,
+            artistName: song.artist,
+            albumID: song.albumId,
+            albumTitle: song.album,
+            duration: song.duration.map(TimeInterval.init),
+            itemCount: nil,
+            internationalStandardRecordingCode: song.isrc?.first
+        )
+        Task { await publishNowPlayingRelevance(item: item) }
+    }
+
+    func updateNowPlayingRelevance(station: RadioStationDisplayItem) {
+        guard let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString else {
+            return
+        }
+        let item = ShelvIntentCatalogItem(
+            reference: ShortcutPlayableReference(
+                serverConfigID: serverConfigID,
+                kind: .radio,
+                contentID: station.id
+            ),
+            title: station.name,
+            artistID: nil,
+            artistName: nil,
+            albumID: nil,
+            albumTitle: nil,
+            duration: nil,
+            itemCount: nil,
+            internationalStandardRecordingCode: nil
+        )
+        Task { await publishNowPlayingRelevance(item: item) }
+    }
+
+    /// Publishes what is playing as the now-playing audio entity. iOS 27's Siri
+    /// uses this to resolve references such as "add this song to my playlist"
+    /// without the person having to name the track again.
+    private func publishNowPlayingRelevance(item: ShelvIntentCatalogItem) async {
+        #if os(iOS) && compiler(>=6.4) && canImport(AppIntents) && canImport(MediaIntents)
+        guard #available(iOS 27.0, *),
+              !item.reference.serverConfigID.isEmpty
+        else { return }
+
+        let entity: any AppEntity
+        switch item.reference.kind {
+        case .song:
+            entity = ShelvAudioSongEntity(item: item)
+        case .radio:
+            entity = ShelvAudioRadioEntity(item: item)
+        case .album, .artist, .playlist:
+            return
+        }
+
+        do {
+            try await RelevantEntities.shared.updateEntities(
+                [entity],
+                for: .audio(.nowPlaying)
+            )
+        } catch {
+            logger.error(
+                "Now playing relevance update failed error=\(String(describing: error), privacy: .private(mask: .hash))"
+            )
+        }
+        #endif
     }
 
     private func donateNativePlayback(

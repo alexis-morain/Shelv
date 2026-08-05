@@ -681,3 +681,6 @@
 "shortcut_error_cancelled" = "Die Wiedergabeanfrage wurde abgebrochen.";
 "shortcut_error_unsupported_queue_operation" = "Dieser Inhalt kann nicht an der gewünschten Position zur Warteschlange hinzugefügt werden.";
 "credential_storage_failed" = "Der sichere Vorgang mit den Zugangsdaten konnte nicht abgeschlossen werden. Bitte versuche es erneut.";
+"shortcut_error_instant_mix_unavailable" = "Der Musikserver hat nicht genügend ähnliche Titel für einen Instant Mix geliefert. Prüfe die Ähnlichkeitsfunktion des Servers.";
+"shortcut_error_unsupported_library_edit" = "Dieser Inhalt kann nicht über Siri geändert werden.";
+"shortcut_error_already_in_playlist" = "Diese Songs sind schon in dieser Playlist.";

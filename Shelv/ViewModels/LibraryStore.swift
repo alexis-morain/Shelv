@@ -1075,53 +1075,6 @@ class LibraryStore: ObservableObject {
         }
     }
 
-    /// Publishes only persisted data needed by a cold Shortcuts picker. Unlike
-    /// the normal loaders this never waits for Navidrome.
-    func loadShortcutCaches() async {
-        guard let serverID = activeServerID else { return }
-        let selectionKey = MusicLibraryStore.shared.snapshot.selectionKey
-        let allowsLegacyFallback = !MusicLibraryStore.shared.snapshot.appliesFilter
-        async let cachedPlaylists: [Playlist]? = Task.detached(priority: .userInitiated) {
-            Self.readFromDisk([Playlist].self, name: "playlists", serverID: serverID)
-        }.value
-        async let cachedStarred: StarredResult? = Task.detached(priority: .userInitiated) {
-            let songs = Self.readFromDisk(
-                [Song].self,
-                name: Self.starredCacheName("starred_songs", selectionKey: selectionKey),
-                serverID: serverID
-            ) ?? (allowsLegacyFallback
-                ? Self.readFromDisk([Song].self, name: "starred_songs", serverID: serverID)
-                : nil)
-            let albums = Self.readFromDisk(
-                [Album].self,
-                name: Self.starredCacheName("starred_albums", selectionKey: selectionKey),
-                serverID: serverID
-            ) ?? (allowsLegacyFallback
-                ? Self.readFromDisk([Album].self, name: "starred_albums", serverID: serverID)
-                : nil)
-            let artists = Self.readFromDisk(
-                [Artist].self,
-                name: Self.starredCacheName("starred_artists", selectionKey: selectionKey),
-                serverID: serverID
-            ) ?? (allowsLegacyFallback
-                ? Self.readFromDisk([Artist].self, name: "starred_artists", serverID: serverID)
-                : nil)
-            guard let songs, let albums, let artists
-            else { return nil }
-            return StarredResult(artist: artists, album: albums, song: songs)
-        }.value
-
-        let (savedPlaylists, savedStarred) = await (cachedPlaylists, cachedStarred)
-        if playlists.isEmpty, let savedPlaylists, !savedPlaylists.isEmpty {
-            playlists = savedPlaylists
-        }
-        if let savedStarred {
-            if starredSongs.isEmpty { starredSongs = FavoritePresentation.songs(savedStarred.song ?? []) }
-            if starredAlbums.isEmpty { starredAlbums = FavoritePresentation.albums(savedStarred.album ?? []) }
-            if starredArtists.isEmpty { starredArtists = FavoritePresentation.artists(savedStarred.artist ?? []) }
-        }
-    }
-
     func loadPlaylistDetail(id: String) async -> Playlist? {
         if OfflineModeService.shared.isOffline {
             return await loadCachedPlaylistDetail(id: id)

@@ -1,13 +1,40 @@
 import AppIntents
+import Intents
 import SwiftUI
 
 struct SiriShortcutsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @State private var authorizationStatus = INPreferences.siriAuthorizationStatus()
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
         List {
+            // Spoken playback goes through SiriKit, which stays silent until
+            // access is granted. Surfacing the state here is the only way to
+            // tell "Siri can't play that" apart from a missing permission.
+            if authorizationStatus != .authorized {
+                Section {
+                    Label {
+                        Text(String(localized: authorizationStatus == .notDetermined
+                            ? "siri_permission_needed"
+                            : "siri_permission_denied"))
+                    } icon: {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                    if authorizationStatus == .notDetermined {
+                        Button(String(localized: "siri_permission_allow")) {
+                            INPreferences.requestSiriAuthorization { status in
+                                Task { @MainActor in authorizationStatus = status }
+                            }
+                        }
+                    } else if let settings = URL(string: UIApplication.openSettingsURLString) {
+                        Link(String(localized: "siri_permission_open_settings"), destination: settings)
+                    }
+                }
+            }
+
             Section {
                 Text(String(localized: "siri_shortcuts_intro"))
                     .foregroundStyle(.secondary)
@@ -22,6 +49,12 @@ struct SiriShortcutsSettingsView: View {
                 capability("arrow.down.circle.fill", "siri_shortcuts_action_downloads")
                 capability("dot.radiowaves.left.and.right", "siri_shortcuts_action_radio")
                 capability("playpause.fill", "siri_shortcuts_action_controls")
+                // Editing the library by voice arrives with the iOS 27 audio
+                // schema, so it is only advertised where it actually works.
+                if #available(iOS 27.0, *) {
+                    capability("star.fill", "siri_shortcuts_action_favorites")
+                    capability("text.badge.plus", "siri_shortcuts_action_playlist_add")
+                }
             }
 
             Section {
@@ -37,6 +70,7 @@ struct SiriShortcutsSettingsView: View {
         }
         .navigationTitle(String(localized: "siri_shortcuts"))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { authorizationStatus = INPreferences.siriAuthorizationStatus() }
     }
 
     private func capability(_ systemImage: String, _ key: LocalizedStringResource) -> some View {

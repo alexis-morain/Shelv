@@ -108,6 +108,21 @@ struct ContentView: View {
             .onReceive(NotificationCenter.default.publisher(for: .instantMixUnavailable)) { _ in
                 offlineToast = ShelveToast(message: String(localized: "no_instant_mix_available"), isError: true)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .shelvIntentLibraryDidChange)) { note in
+                // Siri can star a song or fill a playlist while Shelv sits in
+                // the background; without this the change stays invisible until
+                // the next launch.
+                let change = (note.object as? String)
+                    .flatMap(ShelvIntentLibraryChange.init(rawValue:))
+                Task { @MainActor in
+                    switch change {
+                    case .playlists:
+                        await LibraryStore.shared.loadPlaylists()
+                    case .favorites, nil:
+                        await LibraryStore.shared.loadStarred()
+                    }
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
                 guard serverStore.activeServer != nil else { return }
                 let pendingDestination = ShelvShortcutHandoff.consumePendingDestination()

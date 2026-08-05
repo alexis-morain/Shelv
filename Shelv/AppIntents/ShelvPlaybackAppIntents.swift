@@ -167,7 +167,10 @@ struct ShelvInstantMixQuery: EntityStringQuery {
     }
 }
 
-private protocol ShelvBackgroundPlaybackIntent: AppIntent, AudioPlaybackIntent {}
+/// Shared traits for every iOS intent that starts or steers audio. Keeping them
+/// in one place is what guarantees Siri never foregrounds Shelv just to press
+/// play, and that the passcode prompt stays out of a playback request.
+protocol ShelvBackgroundPlaybackIntent: AppIntent, AudioPlaybackIntent {}
 
 extension ShelvBackgroundPlaybackIntent {
     static var openAppWhenRun: Bool { false }
@@ -199,26 +202,26 @@ struct ShelvPlayPlayableIntent: ShelvBackgroundPlaybackIntent {
     @Parameter(title: "shortcut_playable_parameter")
     var playable: ShelvPlayableEntity
 
-    @Parameter(title: "shortcut_play_text_mode_parameter")
-    var order: ShelvTextPlaybackChoice?
+    @Parameter(title: "shortcut_order_parameter", default: .inOrder)
+    var order: ShortcutPlaybackOrder
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
+    static var parameterSummary: some ParameterSummary {
+        Summary("shortcut_play_summary") {
+            \.$playable
+            \.$order
+        }
+    }
+
     func perform() async throws -> some IntentResult {
-        let resolvedOrder: ShortcutPlaybackOrder
-        switch playable.kind {
-        case .song, .radio:
-            resolvedOrder = .inOrder
-        case .album, .artist, .playlist:
-            if let order {
-                resolvedOrder = order.playbackOrder
-            } else {
-                let choice = try await $order.requestDisambiguation(
-                    among: [.play, .shuffle],
-                    dialog: "shortcut_play_or_shuffle_dialog"
-                )
-                resolvedOrder = choice.playbackOrder
-            }
+        // A single track or a live stream has no meaningful order, so the
+        // parameter is ignored rather than asked about. Spoken shuffle requests
+        // arrive through the media routes, which carry the flag themselves —
+        // asking "play or shuffle?" mid-sentence would only add a turn.
+        let resolvedOrder: ShortcutPlaybackOrder = switch playable.kind {
+        case .song, .radio: .inOrder
+        case .album, .artist, .playlist: order
         }
 
         try await playback.execute(.playable(playable.reference, order: resolvedOrder))

@@ -681,3 +681,6 @@
 "shortcut_error_cancelled" = "The playback request was cancelled.";
 "shortcut_error_unsupported_queue_operation" = "That item cannot be added at the requested queue position.";
 "credential_storage_failed" = "The secure credential operation could not be completed. Please try again.";
+"shortcut_error_instant_mix_unavailable" = "The music server did not return enough related tracks for an Instant Mix. Check the server's similar-music configuration.";
+"shortcut_error_unsupported_library_edit" = "That item cannot be changed from Siri.";
+"shortcut_error_already_in_playlist" = "Those songs are already in that playlist.";

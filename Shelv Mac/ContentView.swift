@@ -202,6 +202,20 @@ struct MainWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .instantMixUnavailable)) { _ in
             showToast(String(localized: "no_instant_mix_available"), isError: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .shelvIntentLibraryDidChange)) { note in
+            // Siri can star a song or fill a playlist while Shelv is in the
+            // background; without this the change stays invisible until relaunch.
+            let change = (note.object as? String)
+                .flatMap(ShelvIntentLibraryChange.init(rawValue:))
+            Task { @MainActor in
+                switch change {
+                case .playlists:
+                    await LibraryViewModel.shared.loadPlaylists(force: true)
+                case .favorites, nil:
+                    await LibraryViewModel.shared.loadStarred()
+                }
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
             let pendingDestination = ShelvShortcutHandoff.consumePendingDestination()
             guard let rawValue = note.object as? String,

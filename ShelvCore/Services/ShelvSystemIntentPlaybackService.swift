@@ -22,16 +22,114 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         let task: Task<Result<Void, ShortcutPlaybackError>, Never>
     }
 
+    /// A track list Siri asked us to prepare ahead of the actual play request.
+    private struct WarmedQueue {
+        let serverConfigID: String
+        let reference: ShortcutPlayableReference
+        let songs: [Song]
+        let expiry: ContinuousClock.Instant
+    }
+
     private var nextFlightID: UInt64 = 0
     private var flight: Flight?
+    private var warmedQueue: WarmedQueue?
+    /// Result of the flight that is currently being waited on. Only the newest
+    /// flight can have an entry, because starting one cancels its predecessor.
+    private var finishedFlight: (id: UInt64, result: Result<Void, ShortcutPlaybackError>)?
 
     private init() {}
 
-    func execute(_ command: ShortcutPlaybackCommand) async throws {
+    /// Resolves and caches the tracks for `reference` so a following play
+    /// request can skip the server round trip. Siri calls this while it is
+    /// still talking to the person, which is what keeps the later answer inside
+    /// the system's deadline on a self-hosted server.
+    func warmUpQueue(for reference: ShortcutPlayableReference) async throws {
+        let serverStore = ServerStore.shared
+        await serverStore.waitUntilReady()
+        guard let server = serverStore.activeServer else {
+            throw ShortcutPlaybackError.noActiveServer
+        }
+        guard reference.serverConfigID == server.id.uuidString else {
+            throw ShortcutPlaybackError.serverChanged
+        }
+
+        // A live stream has no track list to prepare; warming the station
+        // catalog is the equivalent piece of work.
+        guard reference.kind != .radio else {
+            if RadioStationStore.shared.items.isEmpty, await networkAvailable() {
+                await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
+            }
+            return
+        }
+
+        await DownloadDatabase.shared.setup()
+        let storageServerID = server.stableId.isEmpty ? server.id.uuidString : server.stableId
+        let downloads = await LocalDownloadCatalog.load(serverId: storageServerID)
+        LocalDownloadIndex.shared.replace(
+            serverId: storageServerID,
+            pathsBySongId: downloads.pathsBySongId
+        )
+        let songs = try await songs(
+            for: reference,
+            records: downloads.records,
+            storageServerID: storageServerID,
+            mayLoadRemote: await networkAvailable()
+        )
+        guard !songs.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
+        guard ServerStore.shared.activeServer?.id == server.id else {
+            throw ShortcutPlaybackError.serverChanged
+        }
+        warmedQueue = WarmedQueue(
+            serverConfigID: server.id.uuidString,
+            reference: reference,
+            songs: songs,
+            expiry: ContinuousClock().now.advanced(by: .seconds(90))
+        )
+        ShelvIntentDiagnostics.queueWarmed(kind: reference.kind, trackCount: songs.count)
+    }
+
+    /// Resolves the tracks behind a reference without starting playback. Shared
+    /// with the library-editing intents so they see exactly the same content
+    /// Siri would have played.
+    func resolvedSongs(for reference: ShortcutPlayableReference) async throws -> [Song] {
+        let serverStore = ServerStore.shared
+        await serverStore.waitUntilReady()
+        guard let server = serverStore.activeServer else {
+            throw ShortcutPlaybackError.noActiveServer
+        }
+        guard reference.serverConfigID == server.id.uuidString else {
+            throw ShortcutPlaybackError.serverChanged
+        }
+        await DownloadDatabase.shared.setup()
+        let storageServerID = server.stableId.isEmpty ? server.id.uuidString : server.stableId
+        let downloads = await LocalDownloadCatalog.load(serverId: storageServerID)
+        return try await songs(
+            for: reference,
+            records: downloads.records,
+            storageServerID: storageServerID,
+            mayLoadRemote: await networkAvailable()
+        )
+    }
+
+    private func consumeWarmedQueue(for reference: ShortcutPlayableReference) -> [Song]? {
+        guard let warmed = warmedQueue else { return nil }
+        warmedQueue = nil
+        guard warmed.reference == reference,
+              warmed.expiry > ContinuousClock().now,
+              warmed.serverConfigID == ServerStore.shared.activeServer?.id.uuidString
+        else { return nil }
+        ShelvIntentDiagnostics.warmedQueueUsed(trackCount: warmed.songs.count)
+        return warmed.songs
+    }
+
+    func execute(
+        _ command: ShortcutPlaybackCommand,
+        budget: ShortcutIntentBudget = .appIntent
+    ) async throws {
         let action = command.diagnosticAction
         ShelvIntentDiagnostics.began(action: action, reference: command.diagnosticReference)
         do {
-            try await execute(.command(command))
+            try await execute(.command(command), action: action, budget: budget)
             ShelvIntentDiagnostics.completed(action: action)
         } catch let error as ShortcutPlaybackError {
             ShelvIntentDiagnostics.failed(action: action, error: error)
@@ -43,12 +141,17 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         _ reference: ShortcutPlayableReference,
         order: ShortcutPlaybackOrder,
         placement: ShortcutQueuePlacement = .replace,
-        repeats: Bool = false
+        repeats: Bool = false,
+        budget: ShortcutIntentBudget = .appIntent
     ) async throws {
         let action = order == .shuffled ? "media.shuffle" : "media.play"
         ShelvIntentDiagnostics.began(action: action, reference: reference)
         do {
-            try await execute(.playable(reference, order: order, placement: placement, repeats: repeats))
+            try await execute(
+                .playable(reference, order: order, placement: placement, repeats: repeats),
+                action: action,
+                budget: budget
+            )
             ShelvIntentDiagnostics.completed(action: action)
         } catch let error as ShortcutPlaybackError {
             ShelvIntentDiagnostics.failed(action: action, error: error)
@@ -56,7 +159,11 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         }
     }
 
-    private func execute(_ request: Request) async throws {
+    private func execute(
+        _ request: Request,
+        action: String,
+        budget: ShortcutIntentBudget
+    ) async throws {
         #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.beginSystemIntent()
         defer { SiriMediaAppSelectionService.shared.endSystemIntent() }
@@ -65,46 +172,93 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         nextFlightID &+= 1
         let flightID = nextFlightID
         flight?.task.cancel()
+        finishedFlight = nil
 
         let task = Task { @MainActor [weak self] () -> Result<Void, ShortcutPlaybackError> in
             guard let self else { return .failure(.cancelled) }
+            let outcome: Result<Void, ShortcutPlaybackError>
             do {
-                try await self.runWithDeadline(request, flightID: flightID)
-                return .success(())
+                try await self.runWithWorkCeiling(request, flightID: flightID)
+                outcome = .success(())
             } catch let error as ShortcutPlaybackError {
-                return .failure(error)
+                outcome = .failure(error)
             } catch is CancellationError {
-                return .failure(.cancelled)
+                outcome = .failure(.cancelled)
             } catch {
-                return .failure(.remoteFailure(error))
+                outcome = .failure(.remoteFailure(error))
             }
+            if self.flight?.id == flightID { self.flight = nil }
+            self.finishedFlight = (flightID, outcome)
+            return outcome
         }
         flight = Flight(id: flightID, task: task)
 
         let result = await withTaskCancellationHandler {
-            await task.value
+            await awaitFlight(flightID, within: budget.responseDeadline)
         } onCancel: {
             Task { @MainActor [weak self] in
                 guard self?.flight?.id == flightID else { return }
                 self?.flight?.task.cancel()
             }
         }
-        if flight?.id == flightID { flight = nil }
         if Task.isCancelled { throw ShortcutPlaybackError.cancelled }
+        guard let result else {
+            // The answer deadline passed while the track is still being
+            // prepared. The flight is deliberately left running, so reporting
+            // success is the truthful answer: the audio does start moments
+            // later. Reporting a failure here would make Siri talk over music
+            // that is already playing.
+            ShelvIntentDiagnostics.answeredWhileStarting(action: action, budget: budget)
+            return
+        }
         switch result {
         case .success: return
         case .failure(let error): throw error
         }
     }
 
-    private func runWithDeadline(_ request: Request, flightID: UInt64) async throws {
+    /// Waits for a flight to report back, giving up after `duration`.
+    ///
+    /// Polling instead of awaiting the task directly is deliberate: `Task.value`
+    /// ignores cancellation, and a task group would keep waiting for that child
+    /// when the body returns — either would defeat the deadline and abort or
+    /// delay playback that is on its way.
+    private func awaitFlight(
+        _ flightID: UInt64,
+        within duration: Duration
+    ) async -> Result<Void, ShortcutPlaybackError>? {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: duration)
+        while clock.now < deadline {
+            if Task.isCancelled { return .failure(.cancelled) }
+            if let finished = finishedFlight, finished.id == flightID {
+                finishedFlight = nil
+                return finished.result
+            }
+            // A newer request took over. Waiting out the deadline would report
+            // success for work that was cancelled, so say so immediately.
+            if let current = flight, current.id != flightID {
+                return .failure(.cancelled)
+            }
+            do {
+                try await Task.sleep(for: .milliseconds(50))
+            } catch {
+                return .failure(.cancelled)
+            }
+        }
+        return nil
+    }
+
+    /// Upper bound for the background work itself. It only stops a flight that
+    /// hangs; the system has long been answered by the time it fires.
+    private func runWithWorkCeiling(_ request: Request, flightID: UInt64) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask { @MainActor [weak self] in
                 guard let self else { throw ShortcutPlaybackError.cancelled }
                 try await self.run(request, flightID: flightID)
             }
             group.addTask {
-                try await Task.sleep(for: .seconds(25))
+                try await Task.sleep(for: .seconds(45))
                 throw ShortcutPlaybackError.playbackTimedOut
             }
             defer { group.cancelAll() }
@@ -242,12 +396,19 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
             return
         }
 
-        let songs = try await songs(
-            for: reference,
-            records: records,
-            storageServerID: context.storageServerID,
-            mayLoadRemote: mayLoadRemote
-        )
+        // Only playback consumes what Siri asked us to warm up. Library edits
+        // resolve their own copy so they cannot spend the prepared queue.
+        let songs: [Song]
+        if let warmed = consumeWarmedQueue(for: reference) {
+            songs = warmed
+        } else {
+            songs = try await self.songs(
+                for: reference,
+                records: records,
+                storageServerID: context.storageServerID,
+                mayLoadRemote: mayLoadRemote
+            )
+        }
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         try await apply(
             songs: songs,

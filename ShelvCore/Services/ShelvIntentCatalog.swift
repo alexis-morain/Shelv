@@ -300,6 +300,49 @@ final class ShelvIntentCatalog {
         return try await items(for: references)
     }
 
+    /// Resolves bare content IDs of a single kind against the active server.
+    /// The dedicated playlist action stores plain Navidrome IDs in the
+    /// shortcuts people configured, so it cannot use the reference-encoded
+    /// lookup above without invalidating them.
+    func items(
+        for contentIDs: [String],
+        kind: ShortcutPlayableKind
+    ) async throws -> [ShelvIntentCatalogItem] {
+        let context = try await activeContext()
+        return try await items(
+            for: contentIDs.map {
+                ShortcutPlayableReference(
+                    serverConfigID: context.server.id.uuidString,
+                    kind: kind,
+                    contentID: $0
+                )
+            }
+        )
+    }
+
+    /// Searches a single kind and returns the results as bare content IDs are
+    /// expected by ``items(for:kind:)``.
+    func items(
+        matching rawQuery: String,
+        kind: ShortcutPlayableKind,
+        limit: Int
+    ) async throws -> [ShelvIntentCatalogItem] {
+        let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else {
+            return try await suggestedItems(limit: limit, allowedKinds: [kind])
+        }
+        let matches = try await items(
+            matching: query,
+            limit: limit,
+            allowedKinds: [kind]
+        )
+        return Self.deterministicPlaybackMatches(
+            matches,
+            query: query,
+            ambiguityLimit: limit
+        )
+    }
+
     func items(for references: [ShortcutPlayableReference]) async throws -> [ShelvIntentCatalogItem] {
         do {
             let context = try await activeContext()

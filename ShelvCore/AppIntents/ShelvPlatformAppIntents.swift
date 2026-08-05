@@ -360,7 +360,10 @@ struct ShelvPlatformPlayPlaylistIntent: ShelvPlatformPlaybackIntent {
     var order: ShortcutPlaybackOrder
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Play \(\.$playlist) \(\.$order)")
+        Summary("shortcut_play_playlist_summary") {
+            \.$playlist
+            \.$order
+        }
     }
 
     func perform() async throws -> some IntentResult {
