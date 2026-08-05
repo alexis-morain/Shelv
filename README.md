@@ -23,13 +23,14 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 
 ### Library
 - **Albums and Artists** — Browse your full library with an alphabetical index bar; switch between grid and list layout
-- **Quick actions** — Long-press any album or artist in the grid for a context menu (Play, Shuffle, Play Next, Add to Queue); swipe left or right on any row in list view for the same actions
+- **Music Folders** — Filter your library by specific Subsonic music folders configured on your server
+- **Quick actions** — Long-press any album or artist in the grid for a context menu (Play, Shuffle, Instant Mix, Play Next, Add to Queue); swipe left or right on any row in list view for the same actions
 - **Artist detail** — Dedicated Play and Shuffle buttons on the artist page load all tracks in parallel and start playback immediately
 - **Album detail** — Full tracklist with swipe actions per track: swipe right to play next or add to queue, swipe left to favorite or add to a playlist
 
 ### Discover
 - **Shelves** — Recently added, recently played, frequently played, and random albums in horizontal scroll sections
-- **Smart Mixes** — Three one-tap buttons that build a shuffled queue from your newest tracks, most played tracks, or recently played tracks
+- **Smart & Instant Mixes** — One-tap Smart Mixes based on newest, most played, or recently played tracks; Instant Mixes generate a 50-track queue seeded from any song, album, or artist
 - **Random Albums** — A dedicated section with a shuffle button to load a fresh random selection at any time
 - **Insights** — A ranked overview of your most played artists, albums, and songs, pulled directly from your server's play count data. The top three entries are highlighted; play counts are shown as badges next to each entry. Accessible via the chart icon in the top-right corner of Discover
 
@@ -54,6 +55,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 
 ### Playlists *(optional)*
 - Add songs or full albums to existing server playlists, or create a new one on the fly
+- Pin playlists to keep your favorites pinned at the top of the list
 - Available via context menus, swipe actions, and the full-screen player
 - Playlists can be enabled or disabled in Settings; when disabled, all related UI elements are hidden
 
@@ -73,6 +75,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 
 ### Downloads & Offline Mode *(optional, iOS/iPadOS/macOS)*
 - Download albums and artists to your device for playback without a network connection
+- **Keep Library Offline** — Automatically syncs and downloads newly added music from your server to maintain an offline copy
 - **Bulk download** — queue your entire library in one tap; Shelv prioritises frequently played, recently played, and starred content first
 - Configurable storage limit; download badges on album covers show full or partial download status
 - **Offline Mode** — when active, the app plays exclusively from local downloads with no server requests; library views show only downloaded content
@@ -94,6 +97,14 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - **Playlog Sync** — checks whether existing Recap playlists on the server still match the database and lets you apply fixes or create a new playlist
 - Database can be exported and imported; after an import a sync check runs automatically with rollback on cancel
 
+### Siri & Shortcuts
+- **Siri Voice Commands** — Ask Siri to play artists, albums, songs, radio stations, recaps, and mixes across iOS, macOS, and tvOS (via dedicated Siri extension)
+- **App Intents & Shortcuts** — System media intents and customizable App Shortcuts for native iOS automation
+- **Native Audio Schemas** *(iOS 27, macOS 27)* — Shelv adopts Apple's audio intent schemas, so Siri resolves songs, albums, artists, playlists, radio stations, and Instant Mixes against your own library instead of a streaming catalogue
+- **Voice Library Edits** *(iOS 27, macOS 27)* — Mark a song, album, or artist as a favourite, or add music to one of your playlists, by voice
+- **Prepared Playback** — Siri resolves the track list while it is still talking, so a request is answered inside the system's deadline even when the server is slow
+- Playback runs in the background without opening the app; spoken transport commands (pause, next, previous) are handled through the system's media controls
+
 ### CarPlay
 - Browse Discover, Library, Radio, Playlists, Favorites, Recaps, and the current queue from CarPlay
 - Play, shuffle, queue, favorite, and open Now Playing using CarPlay-native templates
@@ -101,14 +112,15 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 
 ### Search
 - Global search across artists, albums, and tracks on your server; also searches locally cached lyrics
+- Recent search history stored per server for quick access
 - Debounced live results with task cancellation — no redundant network requests
 
 ### Settings
 - **Servers** — Add, edit, and switch between multiple Subsonic/Navidrome servers; run a full library scan with progress indicator and last-sync timestamp per server
 - **Appearance** — Choose between Light, Dark, and System mode; pick one of ten accent colors
 - **Cache** — See the current cover art cache size and clear it with a single tap
-- **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Offline Mode, manage downloaded content
-- **Playback** — Configure gapless playback, transcoding, replay gain, scrobble threshold, lyrics, and Queue Sync
+- **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Keep Library Offline and Offline Mode, manage downloaded content
+- **Playback** — Configure gapless playback, transcoding, replay gain, scrobble threshold, lyrics, and Queue Sync; offline scrobbles are queued locally and submitted automatically when reconnected
 - **iCloud** — Enable iCloud sync and choose what to sync: Play History, Recap, Lyrics Server, Queue Sync, and Radio Stations
 - **Recap** — Configure periods (weekly, monthly, yearly), retention, play threshold, and database export/import
 - **Favorites, Playlists & Radio** — Toggle each feature on or off independently
@@ -144,9 +156,11 @@ ShelvApp  (@main)
 ├── ServerStore              — server list, active server, Keychain integration
 ├── LibraryStore  (@MainActor) — albums, artists, Discover data (disk + memory cache)
 ├── AudioPlayerService.shared — AVPlayer, 3-queue system, MPRemoteCommandCenter, AirPlay
+├── DownloadService.shared   — downloads, bulk downloads, and Keep Library Offline sync
 ├── RadioStationStore.shared  — server-backed radio stations and synced radio metadata
 ├── RadioMetadataService.shared — ICY and AzuraCast now-playing metadata polling
 ├── QueueSyncService.shared   — optional iCloud/Subsonic queue handoff
+├── ScrobbleService.shared    — offline-resilient play logging & Subsonic scrobbling
 └── CloudKitSyncService.shared — Play History, Recap, Lyrics Server, Queue Sync, and Radio records
 ```
 
@@ -191,7 +205,7 @@ Pull requests are welcome. For larger changes, please open an issue first to dis
 
 ### Translations
 
-To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `fr.lproj/Localizable.strings`) modelled after `en.lproj/Localizable.strings`. Submit it as a pull request.
+Shelv is available in English, German, and Simplified Chinese. To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `fr.lproj/Localizable.strings`) modelled after `en.lproj/Localizable.strings`. Submit it as a pull request.
 
 ## License
 
