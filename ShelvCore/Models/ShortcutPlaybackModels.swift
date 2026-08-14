@@ -7,6 +7,20 @@ nonisolated enum ShortcutPlayableKind: String, CaseIterable, Hashable, Sendable 
     case artist
     case playlist
     case radio
+
+    /// Tie-break order for search results that match a query equally well
+    /// under different kinds (e.g. a single-track album sharing its song's
+    /// title). Ordered so the song wins instead of raw-value alphabetical
+    /// order, which put "album" ahead of "song".
+    var tieBreakPriority: Int {
+        switch self {
+        case .song: 0
+        case .playlist: 1
+        case .album: 2
+        case .artist: 3
+        case .radio: 4
+        }
+    }
 }
 
 nonisolated enum ShortcutPlaybackOrder: String, CaseIterable, Hashable, Sendable {

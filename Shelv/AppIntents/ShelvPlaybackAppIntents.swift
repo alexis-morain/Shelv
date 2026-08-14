@@ -239,8 +239,8 @@ struct ShelvPlayFromTextIntent: ShelvBackgroundPlaybackIntent {
     @Parameter(title: "shortcut_play_text_parameter")
     var query: String
 
-    @Parameter(title: "shortcut_play_text_mode_parameter")
-    var order: ShelvTextPlaybackChoice?
+    @Parameter(title: "shortcut_play_text_mode_parameter", default: .play)
+    var order: ShelvTextPlaybackChoice
 
     @Dependency private var playback: ShortcutPlaybackCoordinator
 
@@ -266,20 +266,11 @@ struct ShelvPlayFromTextIntent: ShelvBackgroundPlaybackIntent {
             throw ShortcutPlaybackError.notFound
         }
 
-        let resolvedOrder: ShortcutPlaybackOrder
-        switch match.reference.kind {
-        case .song, .radio:
-            resolvedOrder = .inOrder
-        case .album, .artist, .playlist:
-            if let order {
-                resolvedOrder = order.playbackOrder
-            } else {
-                let choice = try await $order.requestDisambiguation(
-                    among: [.play, .shuffle],
-                    dialog: "shortcut_play_or_shuffle_dialog"
-                )
-                resolvedOrder = choice.playbackOrder
-            }
+        // This intent is background-only (see `ShelvBackgroundPlaybackIntent`), so it
+        // can never present a disambiguation dialog. Unset Playback defaults to .play.
+        let resolvedOrder: ShortcutPlaybackOrder = switch match.reference.kind {
+        case .song, .radio: .inOrder
+        case .album, .artist, .playlist: order.playbackOrder
         }
 
         try await playback.execute(.playable(match.reference, order: resolvedOrder))

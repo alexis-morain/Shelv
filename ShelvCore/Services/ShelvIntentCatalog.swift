@@ -248,9 +248,9 @@ final class ShelvIntentCatalog {
                 if $0.score != $1.score { return $0.score > $1.score }
                 let titleOrder = $0.item.title.localizedStandardCompare($1.item.title)
                 if titleOrder != .orderedSame { return titleOrder == .orderedAscending }
-                let leftKind = $0.item.reference.kind.rawValue
-                let rightKind = $1.item.reference.kind.rawValue
-                if leftKind != rightKind { return leftKind < rightKind }
+                let leftKind = $0.item.reference.kind
+                let rightKind = $1.item.reference.kind
+                if leftKind != rightKind { return leftKind.tieBreakPriority < rightKind.tieBreakPriority }
                 return $0.item.reference.identifier < $1.item.reference.identifier
             }
         let primaryMatches = ranked.filter { value in
