@@ -9,12 +9,13 @@ actor ImageCacheService {
     private var inflight: [String: Task<UIImage?, Never>] = [:]
     private var waiters: [String: Int] = [:]
     private var writesSinceTrim = 0
-    private var activeDownloads = 0
-    private var downloadWaitQueue: [CheckedContinuation<Void, Never>] = []
     private static let diskLimitBytes = 1_073_741_824 // 1 GB
     private static let diskTrimTarget  = 900 * 1024 * 1024 // 900 MB (hysteresis)
     private static let writesPerTrimCheck = 20
     private static let maxConcurrentDownloads = 6
+    // nonisolated: read from inside the detached download task below, which runs off
+    // this actor. ConcurrencyLimiter is itself an actor, so sharing the reference is safe.
+    nonisolated private let downloadLimiter = ConcurrencyLimiter(maxConcurrent: ImageCacheService.maxConcurrentDownloads)
     // Bounds how many local artwork files can be decoded at once. Without this, fast-
     // scrolling through a grid of many already-downloaded albums fires one decode Task
     // per cell almost simultaneously; combined with un-downsampled decodes of large
@@ -100,12 +101,13 @@ actor ImageCacheService {
     /// spike memory the way full-resolution `UIImage(contentsOfFile:)` decodes would.
     func localImage(path: String, key: String, maxPixelSize: Int) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
-        await localDecodeLimiter.acquire()
+        guard await localDecodeLimiter.acquire() else { return nil }
+        defer { Task { await localDecodeLimiter.release() } }
+        guard !Task.isCancelled else { return nil }
         let img = await Task.detached(priority: .medium) {
             Self.downsampledImage(contentsOfFile: path, maxPixelSize: maxPixelSize)
         }.value
-        await localDecodeLimiter.release()
-        guard let img else { return nil }
+        guard let img, !Task.isCancelled else { return nil }
         let cost = Int(img.size.width * img.size.height * 4)
         memory.setObject(img, forKey: key as NSString, cost: cost)
         return img
@@ -142,8 +144,8 @@ actor ImageCacheService {
                 return img
             }
             if Task.isCancelled { return nil }
-            await cache.acquireDownloadSlot()
-            defer { Task { await cache.releaseDownloadSlot() } }
+            guard await cache.downloadLimiter.acquire() else { return nil }
+            defer { Task { await cache.downloadLimiter.release() } }
             if Task.isCancelled { return nil }
             guard let (data, img) = await Self.downloadImage(from: url) else { return nil }
             if Task.isCancelled { return nil }
@@ -181,24 +183,6 @@ actor ImageCacheService {
     private func cancelIfLastWaiter(_ key: String) {
         if (waiters[key] ?? 0) <= 1 {
             inflight[key]?.cancel()
-        }
-    }
-
-    private func acquireDownloadSlot() async {
-        if activeDownloads < Self.maxConcurrentDownloads {
-            activeDownloads += 1
-            return
-        }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            downloadWaitQueue.append(continuation)
-        }
-        activeDownloads += 1
-    }
-
-    private func releaseDownloadSlot() {
-        activeDownloads -= 1
-        if !downloadWaitQueue.isEmpty {
-            downloadWaitQueue.removeFirst().resume()
         }
     }
 
