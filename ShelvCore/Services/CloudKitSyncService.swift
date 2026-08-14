@@ -225,7 +225,7 @@ private func withCKTimeout<T: Sendable>(
 /// counts as a hang. Plain lock instead of an actor: callbacks fire per-record from
 /// CKOperation's own queue, and hopping through an actor for every single record would add
 /// needless overhead for what's just an integer bump.
-private final class CKActivityWatchdog: @unchecked Sendable {
+private nonisolated final class CKActivityWatchdog: @unchecked Sendable {
     private let lock = NSLock()
     private var generation = 0
     private var isCancelled = false
