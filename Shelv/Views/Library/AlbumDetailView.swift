@@ -458,16 +458,15 @@ struct AlbumDetailView: View {
     }
 
     private func loadDetail() async {
-        isLoading = true
-        if offlineMode.isOffline {
-            populateFromLocal()
+        populateFromLocal()
+        isLoading = detail == nil
+        guard !offlineMode.isOffline else {
             isLoading = false
             return
         }
         do {
             detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
         } catch {
-            populateFromLocal()
             if detail == nil {
                 errorMessage = error.localizedDescription
             }
