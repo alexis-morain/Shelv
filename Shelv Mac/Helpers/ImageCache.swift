@@ -322,11 +322,12 @@ actor ImageCacheService {
             return nil
         }.value
         if let (image, resolvedKey) = result {
+            // Cache only under the size that was actually found. Also caching it under
+            // the originally-requested `key` would let this lower-res fallback permanently
+            // shadow the real size — `image(url:key:)` checks the memory cache first, so
+            // it would never even attempt to fetch the properly-sized image afterward.
             let cost = Int(image.size.width * image.size.height * 4)
             memory.setObject(image, forKey: resolvedKey as NSString, cost: cost)
-            if resolvedKey != key {
-                memory.setObject(image, forKey: key as NSString, cost: cost)
-            }
         }
         return result?.0
     }
