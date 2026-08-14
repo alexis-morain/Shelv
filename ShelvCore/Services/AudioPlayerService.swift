@@ -812,6 +812,14 @@ class AudioPlayerService: ObservableObject {
         return TranscodingPolicy.currentStreamFormat() == nil ? 0 : 1
     }
 
+    /// How many previously played songs keep their stream cache around for a quick
+    /// replay, instead of it being evicted the moment playback moves on.
+    private static let streamPreCacheBehindCount = 2
+
+    private func desiredStreamCacheBehindSongIds() -> [String] {
+        playbackBackHistory.recentSongIds(limit: Self.streamPreCacheBehindCount)
+    }
+
     private func isDownloadedLocally(_ song: Song) -> Bool {
         let serverId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
         guard !serverId.isEmpty else { return false }
@@ -922,6 +930,7 @@ class AudioPlayerService: ObservableObject {
         return AudioPlayerStreamCacheWindowPlan(
             currentSongId: currentSong.id,
             desiredUpcomingSongIds: desiredStreamCacheSongs().map(\.id),
+            desiredBehindSongIds: desiredStreamCacheBehindSongIds(),
             schedulableJobSongIds: []
         ).keepSongIds
     }
@@ -975,6 +984,7 @@ class AudioPlayerService: ObservableObject {
         let plan = AudioPlayerStreamCacheWindowPlan(
             currentSongId: currentSong.id,
             desiredUpcomingSongIds: desiredSongs.map(\.id),
+            desiredBehindSongIds: desiredStreamCacheBehindSongIds(),
             schedulableJobSongIds: jobs.map(\.songId)
         )
         let keepIds = plan.keepSongIds

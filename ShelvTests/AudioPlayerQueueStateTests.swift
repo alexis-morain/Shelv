@@ -253,6 +253,39 @@ final class AudioPlayerQueueStateTests: XCTestCase {
         XCTAssertEqual(oldestRemainingSongID, "song-1")
     }
 
+    func testRecentSongIdsReturnsMostRecentFirstWithoutConsumingHistory() {
+        var history = AudioPlayerBackHistoryState()
+        var currentSong = testSong("song-a")
+        for id in ["song-b", "song-c", "song-d"] {
+            let nextSong = testSong(id)
+            history.recordTransition(
+                from: currentSong,
+                to: nextSong,
+                queue: [currentSong],
+                currentIndex: 0
+            )
+            currentSong = nextSong
+        }
+
+        XCTAssertEqual(history.recentSongIds(limit: 2), ["song-c", "song-b"])
+        // Not mutating: the same played-back button behavior still works afterward.
+        XCTAssertEqual(history.count, 3)
+        XCTAssertEqual(history.popPrevious(in: [])?.song.id, "song-c")
+    }
+
+    func testRecentSongIdsClampsToAvailableHistoryAndZeroLimit() {
+        var history = AudioPlayerBackHistoryState()
+        history.recordTransition(
+            from: testSong("song-a"),
+            to: testSong("song-b"),
+            queue: [testSong("song-a")],
+            currentIndex: 0
+        )
+
+        XCTAssertEqual(history.recentSongIds(limit: 5), ["song-a"])
+        XCTAssertEqual(history.recentSongIds(limit: 0), [])
+    }
+
     func testHistoryAnchorResolvesByIDAfterQueueReorder() {
         let queue = [testSong("a"), testSong("b"), testSong("c")]
         var history = AudioPlayerBackHistoryState()

@@ -26,4 +26,27 @@ final class AudioPlayerStreamCacheWindowPlanTests: XCTestCase {
         XCTAssertEqual(plan.keepSongIds, Set(upcoming).union(["current"]))
         XCTAssertEqual(plan.schedulingSignature, ["current"] + upcoming)
     }
+
+    func testRecentlyPlayedSongsAreKeptButNeverScheduled() {
+        let plan = AudioPlayerStreamCacheWindowPlan(
+            currentSongId: "current",
+            desiredUpcomingSongIds: ["next-1"],
+            desiredBehindSongIds: ["previous-1", "previous-2"],
+            schedulableJobSongIds: ["next-1"]
+        )
+
+        XCTAssertEqual(plan.keepSongIds, ["current", "next-1", "previous-1", "previous-2"])
+        XCTAssertEqual(plan.schedulingSignature, ["current", "next-1"])
+    }
+
+    func testOverlappingBehindAndUpcomingSongIdsDoNotDuplicate() {
+        let plan = AudioPlayerStreamCacheWindowPlan(
+            currentSongId: "current",
+            desiredUpcomingSongIds: ["shared"],
+            desiredBehindSongIds: ["shared"],
+            schedulableJobSongIds: []
+        )
+
+        XCTAssertEqual(plan.keepSongIds, ["current", "shared"])
+    }
 }

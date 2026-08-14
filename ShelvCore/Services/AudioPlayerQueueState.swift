@@ -46,6 +46,13 @@ nonisolated struct AudioPlayerBackHistoryState: Equatable {
     var count: Int { entries.count }
     var previousSong: Song? { entries.last?.song }
 
+    /// The most recently played song ids, most recent first — used to keep their
+    /// stream cache around for a quick replay instead of evicting them immediately.
+    func recentSongIds(limit: Int) -> [String] {
+        guard limit > 0 else { return [] }
+        return entries.suffix(limit).reversed().map(\.song.id)
+    }
+
     static func recordsSameSongForNext(
         repeatMode: RepeatMode,
         triggeredByUser: Bool,
