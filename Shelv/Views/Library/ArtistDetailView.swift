@@ -635,9 +635,9 @@ struct ArtistDetailView: View {
     }
 
     private func loadDetail() async {
-        isLoading = true
-        if offlineMode.isOffline {
-            populateFromLocal()
+        populateFromLocal()
+        isLoading = detail == nil
+        guard !offlineMode.isOffline else {
             isLoading = false
             return
         }
@@ -647,7 +647,6 @@ struct ArtistDetailView: View {
             detail = try await artistDetail
             biography = (try? await artistInfo)?.biography?.strippingHTML
         } catch {
-            populateFromLocal()
             if detail == nil {
                 errorMessage = error.localizedDescription
             }
