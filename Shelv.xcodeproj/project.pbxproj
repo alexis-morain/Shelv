@@ -7,8 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
+		11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */; };
 		4B666BEAD970D72DFCFF9C7E /* ShelvCore/Services/RadioStationChangeLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */; };
+		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
 		767C48F98385493A929D3CF5 /* ShelvCore/Services/PlaylistDuplicateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */; };
 		A6370E2FCC02E636B1CE06BB /* ShelvCore/Services/PlayLogReconciliationLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */; };
 		BC10000C2FFE000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC10000D2FFE000000000001 /* GRDB */; };
@@ -57,7 +58,6 @@
 		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 		BDDE62632EE3EF6E00895502 /* ShelvCore/Services/RecapExpectedSongsLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */; };
-		11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */; };
 		D65A40B16B924F709F912515 /* ShelvCore/Services/ConcurrencyLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */; };
 /* End PBXBuildFile section */
 
@@ -94,7 +94,7 @@
 
 /* Begin PBXFileReference section */
 		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
-		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
+		3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RecapPeriod.swift; sourceTree = "<group>"; };
 		7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaylistDuplicateChecker.swift; sourceTree = "<group>"; };
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
@@ -144,7 +144,7 @@
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RadioStationChangeLogic.swift; sourceTree = "<group>"; };
 		D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapExpectedSongsLogic.swift; sourceTree = "<group>"; };
-		3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RecapPeriod.swift; sourceTree = "<group>"; };
+		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConcurrencyLimiter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 

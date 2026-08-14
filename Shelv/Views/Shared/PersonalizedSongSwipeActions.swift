@@ -13,6 +13,8 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     let onAddToQueue: () -> Void
 
     @State private var songInfoSong: Song?
+    @State private var shareURL: IdentifiableURL?
+    @State private var shareErrorToast: ShelveToast?
     @Environment(\.personalizationSwipeConfiguration) private var personalization
 
     @ViewBuilder
@@ -25,6 +27,10 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 .sheet(item: $songInfoSong) { song in
                     SongInfoSheetView(song: song, initialTab: .details)
                 }
+                .sheet(item: $shareURL) { wrapped in
+                    ActivityShareSheet(items: [wrapped.url])
+                }
+                .shelveToast($shareErrorToast)
                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
                     swipeButton(for: .leftPrimary)
                     swipeButton(for: .leftSecondary)
@@ -98,6 +104,31 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             songInfoSong = song
         } label: {
             Label(String(localized: "song_info_details"), systemImage: "info.circle")
+        }
+
+        Button {
+            shareSong()
+        } label: {
+            Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func shareSong() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run {
+                        shareErrorToast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
+                    }
+                    return
+                }
+                await MainActor.run { shareURL = IdentifiableURL(url: url) }
+            } catch {
+                await MainActor.run {
+                    shareErrorToast = ShelveToast(message: error.localizedDescription, isError: true)
+                }
+            }
         }
     }
 

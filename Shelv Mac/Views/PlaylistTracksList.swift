@@ -23,6 +23,8 @@ struct PlaylistTrackRow: View {
         UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
     }
     @State private var isHovered = false
+    @State private var shareURL: URL?
+    @State private var shareErrorMessage: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -139,6 +141,34 @@ struct PlaylistTrackRow: View {
             Divider()
             Button(String(localized: "song_info_details")) {
                 AppState.shared.showSongInfo(song)
+            }
+            Button(String(localized: "share")) {
+                shareSong()
+            }
+        }
+        .sharingServicePicker(url: $shareURL)
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { shareErrorMessage != nil }, set: { if !$0 { shareErrorMessage = nil } }),
+            presenting: shareErrorMessage
+        ) { _ in
+            Button(String(localized: "ok")) {}
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private func shareSong() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run { shareErrorMessage = String(localized: "share_link_failed") }
+                    return
+                }
+                await MainActor.run { shareURL = url }
+            } catch {
+                await MainActor.run { shareErrorMessage = error.localizedDescription }
             }
         }
     }

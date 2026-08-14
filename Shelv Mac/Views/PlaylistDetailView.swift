@@ -139,6 +139,8 @@ struct PlaylistDetailView: View {
     @State private var displayName: String = ""
     @State private var displayComment: String = ""
     @State private var searchQuery = ""
+    @State private var shareURL: URL?
+    @State private var shareErrorMessage: String?
 
     private var displayedSongRows: [IndexedSongOccurrence] {
         let rows = IndexedSongOccurrence.rows(for: songs)
@@ -245,6 +247,15 @@ struct PlaylistDetailView: View {
         } message: {
             Text(String(localized: "this_action_cannot_be_undone"))
         }
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { shareErrorMessage != nil }, set: { if !$0 { shareErrorMessage = nil } }),
+            presenting: shareErrorMessage
+        ) { _ in
+            Button(String(localized: "ok")) {}
+        } message: { message in
+            Text(message)
+        }
         .task(id: playlist.id) {
             displayName = playlist.name
             displayComment = playlist.comment ?? ""
@@ -281,6 +292,15 @@ struct PlaylistDetailView: View {
         }
         ToolbarItem(placement: .primaryAction) {
             Button {
+                sharePlaylist()
+            } label: {
+                Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+            }
+            .help(String(localized: "share"))
+            .sharingServicePicker(url: $shareURL)
+        }
+        ToolbarItem(placement: .primaryAction) {
+            Button {
                 if isEditMode {
                     commitEdits()
                 } else {
@@ -305,6 +325,21 @@ struct PlaylistDetailView: View {
             }
             .help(String(localized: "delete_playlist_2"))
             .tint(.red)
+        }
+    }
+
+    private func sharePlaylist() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: playlist.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run { shareErrorMessage = String(localized: "share_link_failed") }
+                    return
+                }
+                await MainActor.run { shareURL = url }
+            } catch {
+                await MainActor.run { shareErrorMessage = error.localizedDescription }
+            }
         }
     }
 

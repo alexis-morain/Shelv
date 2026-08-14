@@ -761,3 +761,5 @@
 "shortcut_play_choice_play" = "Play";
 "shortcut_play_choice_shuffle" = "Shuffle";
 "shortcut_play_or_shuffle_dialog" = "Play or shuffle?";
+"share" = "Share";
+"share_link_failed" = "Couldn't create share link.";

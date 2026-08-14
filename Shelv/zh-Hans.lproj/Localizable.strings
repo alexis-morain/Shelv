@@ -761,3 +761,5 @@
 "shortcut_play_choice_play" = "播放";
 "shortcut_play_choice_shuffle" = "随机播放";
 "shortcut_play_or_shuffle_dialog" = "播放还是随机播放？";
+"share" = "分享";
+"share_link_failed" = "无法创建分享链接。";

@@ -35,6 +35,7 @@ struct ArtistDetailView: View {
     @State private var albumToDeleteDownloads: Album?
     @State private var showDeleteArtistDownloadConfirm = false
     @State private var downloadedAlbumCounts: [String: Int] = [:]
+    @State private var shareURL: IdentifiableURL?
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
     private var sortOption: AlbumSortOption {
@@ -117,6 +118,9 @@ struct ArtistDetailView: View {
             }
         }
         .shelveToast($currentToast)
+        .sheet(item: $shareURL) { wrapped in
+            ActivityShareSheet(items: [wrapped.url])
+        }
         .alert(
             String(localized: "delete_downloads"),
             isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
@@ -616,6 +620,11 @@ struct ArtistDetailView: View {
                 Divider()
                 artistDownloadMenuItems
             }
+
+            if !(enableDownloads && artistDownloadStatus != .none) {
+                Divider()
+                shareMenuItem
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .foregroundStyle(accentColor)
@@ -736,8 +745,10 @@ struct ArtistDetailView: View {
                 }
                 .tint(accentColor)
             }
+            shareMenuItem
             deleteArtistDownloadMenuItem
         case .complete:
+            shareMenuItem
             deleteArtistDownloadMenuItem
         }
     }
@@ -754,6 +765,33 @@ struct ArtistDetailView: View {
             }
         }
         .tint(.red)
+    }
+
+    private var shareMenuItem: some View {
+        Button {
+            shareArtist()
+        } label: {
+            Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func shareArtist() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: artist.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run {
+                        currentToast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
+                    }
+                    return
+                }
+                await MainActor.run { shareURL = IdentifiableURL(url: url) }
+            } catch {
+                await MainActor.run {
+                    currentToast = ShelveToast(message: error.localizedDescription, isError: true)
+                }
+            }
+        }
     }
 }
 

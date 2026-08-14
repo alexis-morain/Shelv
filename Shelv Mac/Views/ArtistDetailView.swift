@@ -27,6 +27,8 @@ struct ArtistDetailView: View {
     @Environment(\.themeColor) private var themeColor
     @State private var showDeleteDownloadConfirm = false
     @State private var searchQuery = ""
+    @State private var shareURL: URL?
+    @State private var shareErrorMessage: String?
     @State private var artistSongs: [Song]?
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
@@ -236,6 +238,17 @@ struct ArtistDetailView: View {
         .navigationTitle(vm.artist?.name ?? artistName)
         .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
         .hidesTitlebarSeparator()
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    shareArtist()
+                } label: {
+                    Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+                }
+                .help(String(localized: "share"))
+                .sharingServicePicker(url: $shareURL)
+            }
+        }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
                 sortRaw = LibrarySortOption.name.rawValue
@@ -271,6 +284,30 @@ struct ArtistDetailView: View {
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
+        }
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { shareErrorMessage != nil }, set: { if !$0 { shareErrorMessage = nil } }),
+            presenting: shareErrorMessage
+        ) { _ in
+            Button(String(localized: "ok")) {}
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private func shareArtist() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: artistId)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run { shareErrorMessage = String(localized: "share_link_failed") }
+                    return
+                }
+                await MainActor.run { shareURL = url }
+            } catch {
+                await MainActor.run { shareErrorMessage = error.localizedDescription }
+            }
         }
     }
 

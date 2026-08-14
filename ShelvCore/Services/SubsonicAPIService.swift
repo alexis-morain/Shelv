@@ -420,6 +420,16 @@ private nonisolated struct CreatePlaylistBody: Decodable, Sendable {
     let playlist: PlaylistBody.PlaylistDetail?
 }
 
+private nonisolated struct CreateShareBody: Decodable, Sendable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let shares: SharesContainer?
+
+    struct SharesContainer: Decodable, Sendable {
+        let share: [Share]?
+    }
+}
+
 private nonisolated struct InternetRadioStationsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
@@ -2075,6 +2085,22 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             extra: extra
         ).response
         try check(status: body.status, error: body.error)
+    }
+
+    /// Creates a public Navidrome share link for a song, album, artist, or playlist id.
+    func createShare(id: String, description: String? = nil) async throws -> Share {
+        var extra = [URLQueryItem(name: "id", value: id)]
+        if let description { extra.append(URLQueryItem(name: "description", value: description)) }
+        let body = try await fetchDecoded(
+            Envelope<CreateShareBody>.self,
+            path: "createShare",
+            extra: extra
+        ).response
+        try check(status: body.status, error: body.error)
+        guard let share = body.shares?.share?.first else {
+            throw SubsonicAPIError.apiError(0, "Create share failed")
+        }
+        return share
     }
 
     func unstar(songId: String? = nil, albumId: String? = nil, artistId: String? = nil) async throws {

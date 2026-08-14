@@ -24,6 +24,7 @@ struct AlbumDetailView: View {
     @State private var searchQuery = ""
     @State private var showDeleteAlbumDownloadConfirm = false
     @State private var downloadedAlbumSongCount = 0
+    @State private var shareURL: IdentifiableURL?
 
     private struct IndexedSongRow: Identifiable {
         let index: Int
@@ -205,6 +206,11 @@ struct AlbumDetailView: View {
                         Divider()
                         downloadMenuItems(status: albumDownloadStatus)
                     }
+
+                    if !(enableDownloads && albumDownloadStatus != .none) {
+                        Divider()
+                        shareMenuItem
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .symbolRenderingMode(.hierarchical)
@@ -228,6 +234,9 @@ struct AlbumDetailView: View {
             AddToPlaylistSheet(songIds: item.ids)
                 .environmentObject(libraryStore)
                 .tint(accentColor)
+        }
+        .sheet(item: $shareURL) { wrapped in
+            ActivityShareSheet(items: [wrapped.url])
         }
         .task {
             await loadDetail()
@@ -341,9 +350,38 @@ struct AlbumDetailView: View {
                 }
                 .tint(accentColor)
             }
+            shareMenuItem
             deleteDownloadMenuItem
         case .complete:
+            shareMenuItem
             deleteDownloadMenuItem
+        }
+    }
+
+    private var shareMenuItem: some View {
+        Button {
+            shareAlbum()
+        } label: {
+            Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func shareAlbum() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: album.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run {
+                        currentToast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
+                    }
+                    return
+                }
+                await MainActor.run { shareURL = IdentifiableURL(url: url) }
+            } catch {
+                await MainActor.run {
+                    currentToast = ShelveToast(message: error.localizedDescription, isError: true)
+                }
+            }
         }
     }
 

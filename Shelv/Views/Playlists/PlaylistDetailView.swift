@@ -32,6 +32,7 @@ struct PlaylistDetailView: View {
     @State private var isMarkedForOffline: Bool
     @State private var trackedPlaylistSongIDs: Set<String>
     @State private var downloadedSongIDs: Set<String>
+    @State private var shareURL: IdentifiableURL?
     @Environment(\.dismiss) private var dismiss
 
     init(playlist: Playlist) {
@@ -249,6 +250,12 @@ struct PlaylistDetailView: View {
                             Label(String(localized: "rename"), systemImage: "pencil.line")
                         }
 
+                        Button {
+                            sharePlaylist()
+                        } label: {
+                            Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+                        }
+
                         Divider()
 
                         Button(role: .destructive) {
@@ -264,6 +271,9 @@ struct PlaylistDetailView: View {
             }
         }
         .shelveToast($currentToast)
+        .sheet(item: $shareURL) { wrapped in
+            ActivityShareSheet(items: [wrapped.url])
+        }
         .alert(String(localized: "rename_playlist"), isPresented: $showRenameAlert) {
             TextField(String(localized: "name"), text: $newName)
             TextField(String(localized: "comment"), text: $newComment)
@@ -450,6 +460,25 @@ struct PlaylistDetailView: View {
                 }
             }
             .tint(.red)
+        }
+    }
+
+    private func sharePlaylist() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: playlist.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run {
+                        currentToast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
+                    }
+                    return
+                }
+                await MainActor.run { shareURL = IdentifiableURL(url: url) }
+            } catch {
+                await MainActor.run {
+                    currentToast = ShelveToast(message: error.localizedDescription, isError: true)
+                }
+            }
         }
     }
 
