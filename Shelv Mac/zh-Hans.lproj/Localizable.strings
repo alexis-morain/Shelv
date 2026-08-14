@@ -760,3 +760,6 @@
 "shortcut_media_add_library_description" = "在 Shelv 中将歌曲、专辑或艺人标记为收藏。";
 "shortcut_media_add_playlist_title" = "加入 Shelv 播放列表";
 "shortcut_media_add_playlist_description" = "将歌曲、专辑、艺人或播放列表加入某个 Shelv 播放列表。";
+"share" = "分享";
+"share_link_failed" = "无法创建分享链接。";
+"error" = "错误";

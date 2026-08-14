@@ -760,3 +760,6 @@
 "shortcut_media_add_library_description" = "Einen Song, ein Album oder einen Künstler in Shelv als Favorit markieren.";
 "shortcut_media_add_playlist_title" = "Zu Playlist in Shelv hinzufügen";
 "shortcut_media_add_playlist_description" = "Einen Song, ein Album, einen Künstler oder eine Playlist zu einer Shelv-Playlist hinzufügen.";
+"share" = "Teilen";
+"share_link_failed" = "Link konnte nicht erstellt werden.";
+"error" = "Fehler";

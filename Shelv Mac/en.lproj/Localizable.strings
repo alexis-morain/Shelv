@@ -760,3 +760,6 @@
 "shortcut_media_add_library_description" = "Mark a song, album, or artist as a favorite in Shelv.";
 "shortcut_media_add_playlist_title" = "Add to Playlist in Shelv";
 "shortcut_media_add_playlist_description" = "Add a song, album, artist, or playlist to one of your Shelv playlists.";
+"share" = "Share";
+"share_link_failed" = "Couldn't create share link.";
+"error" = "Error";
