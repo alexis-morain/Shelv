@@ -887,7 +887,53 @@ struct SearchView: View {
 
     @ViewBuilder
     private func artistContextMenuItems(_ artist: Artist) -> some View {
+        Button {
+            Task {
+                let songs = await libraryStore.fetchAllSongs(for: artist)
+                guard !songs.isEmpty else { return }
+                player.play(songs: songs, startIndex: 0)
+            }
+        } label: { Label(String(localized: "play"), systemImage: "play.fill") }
+
+        Button {
+            Task {
+                let songs = await libraryStore.fetchAllSongs(for: artist)
+                guard !songs.isEmpty else { return }
+                player.playShuffled(songs: songs)
+            }
+        } label: { Label(String(localized: "shuffle"), systemImage: "shuffle") }
+
         artistInstantMixMenuItem(artist)
+
+        Divider()
+
+        Button { playNextArtist(artist) } label: {
+            Label(String(localized: "play_next"), systemImage: "text.insert")
+        }
+        Button { queueArtist(artist) } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+        }
+
+        if !offlineMode.isOffline && (showFavoriteActions || showPlaylistActions) {
+            Divider()
+            if showFavoriteActions {
+                Button {
+                    Task { await libraryStore.toggleStarArtist(artist) }
+                } label: {
+                    Label(
+                        libraryStore.isArtistStarred(artist)
+                            ? String(localized: "unfavorite")
+                            : String(localized: "favorite"),
+                        systemImage: libraryStore.isArtistStarred(artist) ? "heart.slash.fill" : "heart"
+                    )
+                }
+            }
+            if showPlaylistActions {
+                Button {
+                    addArtistToPlaylist(artist)
+                } label: { Label(String(localized: "add_to_playlist"), systemImage: "music.note.list") }
+            }
+        }
 
         if enableDownloads {
             Divider()
