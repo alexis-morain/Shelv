@@ -32,6 +32,8 @@ struct ArtistDetailView: View {
     @State private var artistSongs: [Song]?
     @State private var topSongs: [Song] = []
     @State private var topSongsExpanded = false
+    @State private var similarArtists: [Artist] = []
+    @State private var releaseGroup: ArtistReleaseGroup = .all
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
     @State private var albumToDeleteDownloads: Album?
@@ -91,6 +93,21 @@ struct ArtistDetailView: View {
 
     private var showsTopSongs: Bool {
         searchQuery.isEmpty && !visibleTopSongs.isEmpty
+    }
+
+    private var releaseGroups: [ArtistReleaseGroup] {
+        searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: sortedAlbums) : []
+    }
+
+    /// The albums actually shown: the search filter first, then the
+    /// album / singles filter of the discography section.
+    private var displayedAlbums: [Album] {
+        guard searchQuery.isEmpty else { return filteredAlbums }
+        return ArtistDiscography.filter(filteredAlbums, to: releaseGroup)
+    }
+
+    private var showsSimilarArtists: Bool {
+        searchQuery.isEmpty && !similarArtists.isEmpty
     }
 
     private var sortedAlbums: [Album] {
@@ -304,12 +321,18 @@ struct ArtistDetailView: View {
                         .padding(.top, 40)
                         .frame(maxWidth: .infinity)
                 } else if !filteredAlbums.isEmpty {
-                    Text(String(localized: "albums"))
-                        .font(.title3).bold()
-                        .padding(.horizontal)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(String(localized: searchQuery.isEmpty ? "discography" : "albums"))
+                            .font(.title3).bold()
+
+                        if !releaseGroups.isEmpty {
+                            ArtistReleaseGroupPicker(selection: $releaseGroup, groups: releaseGroups)
+                        }
+                    }
+                    .padding(.horizontal)
 
                     LazyVGrid(columns: columns, spacing: 20) {
-                        ForEach(filteredAlbums) { album in
+                        ForEach(displayedAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
                                 AlbumCardView(
                                     album: album,
@@ -349,9 +372,24 @@ struct ArtistDetailView: View {
                     }
                 }
 
+                if showsSimilarArtists {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(String(localized: "fans_also_like"))
+                            .font(.title3).bold()
+                            .padding(.horizontal)
+
+                        ArtistSimilarArtistsRow(artists: similarArtists)
+                    }
+                }
+
                 if let bio = biography, !bio.isEmpty {
-                    ArtistBiographyBox(biography: bio, accentColor: accentColor)
-                        .padding(.horizontal)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(String(localized: "more_info"))
+                            .font(.title3).bold()
+
+                        ArtistBiographyBox(biography: bio, accentColor: accentColor)
+                    }
+                    .padding(.horizontal)
                 }
 
                 PlayerBottomSpacer()
@@ -421,7 +459,13 @@ struct ArtistDetailView: View {
                 }
             } else if !filteredAlbums.isEmpty {
                 Section {
-                    ForEach(filteredAlbums) { album in
+                    if !releaseGroups.isEmpty {
+                        ArtistReleaseGroupPicker(selection: $releaseGroup, groups: releaseGroups)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                            .listRowSeparator(.hidden)
+                    }
+
+                    ForEach(displayedAlbums) { album in
                         NavigationLink(destination: AlbumDetailView(album: album)) {
                             albumListRow(album)
                         }
@@ -451,7 +495,7 @@ struct ArtistDetailView: View {
                     }
                 } header: {
                     HStack {
-                        Text(String(localized: "albums"))
+                        Text(String(localized: searchQuery.isEmpty ? "discography" : "albums"))
                             .font(.title3).bold()
                             .textCase(nil)
                             .foregroundStyle(.primary)
@@ -483,12 +527,37 @@ struct ArtistDetailView: View {
                 }
             }
 
+            if showsSimilarArtists {
+                Section {
+                    ArtistSimilarArtistsRow(artists: similarArtists)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    HStack {
+                        Text(String(localized: "fans_also_like"))
+                            .font(.title3).bold()
+                            .textCase(nil)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                }
+            }
+
             if let bio = biography, !bio.isEmpty {
                 Section {
                     ArtistBiographyBox(biography: bio, accentColor: accentColor)
-                        .listRowInsets(EdgeInsets(top: 24, leading: 16, bottom: 0, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                } header: {
+                    HStack {
+                        Text(String(localized: "more_info"))
+                            .font(.title3).bold()
+                            .textCase(nil)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
                 }
             }
 
@@ -709,14 +778,20 @@ struct ArtistDetailView: View {
         isLoading = detail == nil
         guard !offlineMode.isOffline else {
             topSongs = []
+            similarArtists = []
             isLoading = false
             return
         }
         do {
             async let artistDetail = SubsonicAPIService.shared.getArtist(id: artist.id)
-            async let artistInfo = SubsonicAPIService.shared.getArtistInfo(id: artist.id)
+            async let artistInfo = SubsonicAPIService.shared.getArtistInfo(
+                id: artist.id,
+                similarArtistCount: ArtistPageLayout.similarArtistCount
+            )
             detail = try await artistDetail
-            biography = (try? await artistInfo)?.biography?.strippingHTML
+            let info = try? await artistInfo
+            biography = info?.biography?.strippingHTML
+            similarArtists = info?.similarArtist ?? []
         } catch {
             if detail == nil {
                 errorMessage = error.localizedDescription

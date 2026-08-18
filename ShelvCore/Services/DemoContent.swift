@@ -133,6 +133,20 @@ nonisolated enum DemoContent {
                            year: a.year, genre: a.genre, song: songsByAlbumId[id])
     }
 
+    /// Biography and related artists for the artist page. The other demo
+    /// artists stand in for what a server returns as similar artists.
+    static func artistInfo(id: String, similarArtistCount: Int) -> ArtistInfo {
+        let biography = artists.first(where: { $0.id == id }).map {
+            "\($0.name) records slow, wide ambient pieces built from field recordings and analogue tape. "
+            + "This biography is part of the demo library and does not describe a real artist."
+        }
+        guard similarArtistCount > 0 else {
+            return ArtistInfo(biography: biography, similarArtist: nil)
+        }
+        let others = artists.filter { $0.id != id }.prefix(similarArtistCount)
+        return ArtistInfo(biography: biography, similarArtist: Array(others))
+    }
+
     static func artistDetail(id: String) -> ArtistDetail? {
         guard let artist = artists.first(where: { $0.id == id }) else { return nil }
         let owned = albums.filter { $0.artistId == id }

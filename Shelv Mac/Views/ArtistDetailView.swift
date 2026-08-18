@@ -31,6 +31,7 @@ struct ArtistDetailView: View {
     @State private var shareErrorMessage: String?
     @State private var artistSongs: [Song]?
     @State private var topSongsExpanded = false
+    @State private var releaseGroup: ArtistReleaseGroup = .all
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
 
@@ -55,9 +56,12 @@ struct ArtistDetailView: View {
     }
 
     private var displayAlbums: [Album] {
-        let filtered = searchQuery.isEmpty
+        let searched = searchQuery.isEmpty
             ? availableAlbums
             : availableAlbums.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
+        let filtered = searchQuery.isEmpty
+            ? ArtistDiscography.filter(searched, to: releaseGroup)
+            : searched
         return ArtistAlbumPlaybackOrder.sorted(
             filtered,
             preference: ArtistAlbumSortPreference(
@@ -65,6 +69,10 @@ struct ArtistDetailView: View {
                 directionRaw: directionRaw
             )
         )
+    }
+
+    private var releaseGroups: [ArtistReleaseGroup] {
+        searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: availableAlbums) : []
     }
 
     private var visibleTopSongs: [Song] {
@@ -133,6 +141,23 @@ struct ArtistDetailView: View {
 
                         if !vm.albums.isEmpty {
                             if searchQuery.isEmpty {
+                                HStack(spacing: 12) {
+                                    Text(String(localized: "discography"))
+                                        .font(.title3.bold())
+                                    if !releaseGroups.isEmpty {
+                                        Picker(String(localized: "discography"), selection: $releaseGroup) {
+                                            ForEach(releaseGroups, id: \.rawValue) { group in
+                                                Text(group.label).tag(group)
+                                            }
+                                        }
+                                        .pickerStyle(.segmented)
+                                        .labelsHidden()
+                                        .fixedSize()
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 20)
+
                                 HStack(spacing: 8) {
                                     Picker(String(localized: "sort"), selection: $sortRaw) {
                                         ForEach(LibrarySortOption.allCases.filter {
@@ -236,11 +261,20 @@ struct ArtistDetailView: View {
                             }
                         }
 
+                        if searchQuery.isEmpty && !vm.similarArtists.isEmpty {
+                            similarArtistsSection
+                        }
+
                         if let bio = vm.biography, !bio.isEmpty {
-                            ArtistBiographyBox(biography: bio)
-                                .frame(maxWidth: 640)
-                                .padding(.horizontal, 20)
-                                .padding(.bottom, 24)
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(String(localized: "more_info"))
+                                    .font(.title3.bold())
+                                ArtistBiographyBox(biography: bio)
+                                    .frame(maxWidth: 640)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 24)
                         }
                     }
                 }
@@ -305,6 +339,40 @@ struct ArtistDetailView: View {
         } message: { message in
             Text(message)
         }
+    }
+
+    private var similarArtistsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "fans_also_like"))
+                .font(.title3.bold())
+                .padding(.horizontal, 20)
+
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    ForEach(vm.similarArtists) { artist in
+                        NavigationLink(value: artist) {
+                            VStack(spacing: 8) {
+                                CoverArtView(
+                                    coverArtID: artist.coverArt,
+                                    requestSize: 200,
+                                    size: 104,
+                                    isCircle: true
+                                )
+                                Text(artist.name)
+                                    .font(.callout)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                                    .frame(width: 104)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 20)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .padding(.bottom, 8)
     }
 
     private var topSongsSection: some View {
@@ -577,12 +645,24 @@ struct ArtistDetailView: View {
     }
 }
 
+extension ArtistReleaseGroup {
+    /// Localised in each UI target, the way the other sort and filter enums are.
+    var label: String {
+        switch self {
+        case .all: String(localized: "release_group_all")
+        case .albums: String(localized: "albums")
+        case .singlesAndEPs: String(localized: "release_group_singles_eps")
+        }
+    }
+}
+
 @MainActor
 class ArtistDetailViewModel: ObservableObject {
     @Published var artist: ArtistDetail?
     @Published var albums: [Album] = []
     @Published var biography: String?
     @Published var topSongs: [Song] = []
+    @Published var similarArtists: [Artist] = []
     @Published var isLoading: Bool = false
     @Published var isLoadingSongs: Bool = false
     @Published var errorMessage: String?
@@ -595,16 +675,22 @@ class ArtistDetailViewModel: ObservableObject {
         errorMessage = nil
         if OfflineModeService.shared.isOffline {
             populateFromLocal(artistId: artistId, artistName: artistName)
+            similarArtists = []
             isLoading = false
             return
         }
         do {
             async let artistDetail = api.getArtist(id: artistId)
-            async let artistInfo = api.getArtistInfo(id: artistId)
+            async let artistInfo = api.getArtistInfo(
+                id: artistId,
+                similarArtistCount: ArtistPageLayout.similarArtistCount
+            )
             let detail = try await artistDetail
             artist = detail
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-            biography = (try? await artistInfo)?.biography?.strippingHTML
+            let info = try? await artistInfo
+            biography = info?.biography?.strippingHTML
+            similarArtists = info?.similarArtist ?? []
         } catch {
             let inlineMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             populateFromLocal(artistId: artistId, artistName: artistName)

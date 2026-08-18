@@ -150,6 +150,11 @@
 "free_on_device" = "Free on device";
 "songs" = "Songs";
 "top_songs" = "Top Songs";
+"discography" = "Discography";
+"release_group_all" = "All";
+"release_group_singles_eps" = "Singles & EPs";
+"fans_also_like" = "Fans Also Like";
+"more_info" = "More Info";
 "show_more" = "Show more";
 "show_less" = "Show less";
 "enable_downloads" = "Enable Downloads";

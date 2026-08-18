@@ -150,6 +150,11 @@
 "free_on_device" = "设备可用";
 "songs" = "歌曲";
 "top_songs" = "热门歌曲";
+"discography" = "作品";
+"release_group_all" = "全部";
+"release_group_singles_eps" = "单曲和 EP";
+"fans_also_like" = "粉丝也喜欢";
+"more_info" = "更多信息";
 "show_more" = "显示更多";
 "show_less" = "收起";
 "enable_downloads" = "启用下载";

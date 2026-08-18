@@ -15,6 +15,9 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
     let playCount: Int?
     var starred: Date?
     let created: Date?
+    /// OpenSubsonic release types ("album", "single", "ep", "compilation", …),
+    /// when the server supplies them.
+    let releaseTypes: [String]?
     var songs: [Song]?
 
     var isStarred: Bool { starred != nil }
@@ -25,7 +28,7 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, sortName, artist, artistId, coverArt, songCount, duration, year, genre, playCount, starred, created
+        case id, name, sortName, artist, artistId, coverArt, songCount, duration, year, genre, playCount, starred, created, releaseTypes
     }
 
     init(
@@ -42,6 +45,7 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
         playCount: Int? = nil,
         starred: Date? = nil,
         created: Date? = nil,
+        releaseTypes: [String]? = nil,
         songs: [Song]? = nil
     ) {
         self.id = id
@@ -57,6 +61,7 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
         self.playCount = playCount
         self.starred = starred
         self.created = created
+        self.releaseTypes = releaseTypes
         self.songs = songs
     }
 
@@ -75,6 +80,7 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
         playCount = try c.decodeIfPresent(Int.self, forKey: .playCount)
         starred = FlexibleDate.decode(c, .starred)
         created = FlexibleDate.decode(c, .created)
+        releaseTypes = try c.decodeIfPresent([String].self, forKey: .releaseTypes)
         songs = nil
     }
 }
