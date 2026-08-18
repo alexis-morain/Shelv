@@ -149,6 +149,9 @@
 "used" = "已用";
 "free_on_device" = "设备可用";
 "songs" = "歌曲";
+"top_songs" = "热门歌曲";
+"show_more" = "显示更多";
+"show_less" = "收起";
 "enable_downloads" = "启用下载";
 "disable_downloads_2" = "停用下载？";
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "正在进行的下载将被取消，所有已下载的歌曲、专辑和艺术家都将从本设备移除。";

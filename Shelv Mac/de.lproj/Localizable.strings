@@ -149,6 +149,9 @@
 "used" = "Belegt";
 "free_on_device" = "Frei auf Gerät";
 "songs" = "Titel";
+"top_songs" = "Top-Titel";
+"show_more" = "Mehr anzeigen";
+"show_less" = "Weniger anzeigen";
 "enable_downloads" = "Downloads aktivieren";
 "disable_downloads_2" = "Downloads deaktivieren?";
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Aktive Downloads werden abgebrochen und alle heruntergeladenen Songs, Alben und Künstler von diesem Gerät entfernt.";

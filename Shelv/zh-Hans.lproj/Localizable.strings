@@ -25,6 +25,8 @@
 "track_collection_duration_hours_format" = "%d小时";
 "track_collection_duration_hours_minutes_format" = "%d小时%d分钟";
 "show_more" = "显示更多";
+"show_less" = "收起";
+"top_songs" = "热门歌曲";
 "downloads" = "下载";
 "library" = "音乐库";
 "libraries" = "音乐库";

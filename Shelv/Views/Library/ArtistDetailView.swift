@@ -30,6 +30,8 @@ struct ArtistDetailView: View {
     @State private var currentToast: ShelveToast?
     @State private var searchQuery = ""
     @State private var artistSongs: [Song]?
+    @State private var topSongs: [Song] = []
+    @State private var topSongsExpanded = false
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
     @State private var albumToDeleteDownloads: Album?
@@ -79,6 +81,16 @@ struct ArtistDetailView: View {
 
     private var songSearchLoadID: String {
         "\(searchQuery.isEmpty ? "idle" : "searching")|\(songSearchSourceID)"
+    }
+
+    private var visibleTopSongs: [Song] {
+        topSongsExpanded
+            ? topSongs
+            : Array(topSongs.prefix(ArtistTopSongsRanking.collapsedLimit))
+    }
+
+    private var showsTopSongs: Bool {
+        searchQuery.isEmpty && !visibleTopSongs.isEmpty
     }
 
     private var sortedAlbums: [Album] {
@@ -246,10 +258,38 @@ struct ArtistDetailView: View {
         .padding(.top, 16)
     }
 
+    private var topSongsGridSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "top_songs"))
+                .font(.title3).bold()
+
+            LazyVStack(spacing: 0) {
+                ForEach(Array(visibleTopSongs.enumerated()), id: \.element.id) { index, song in
+                    Button {
+                        player.play(songs: visibleTopSongs, startIndex: index)
+                    } label: {
+                        ArtistTopSongRow(rank: index + 1, song: song)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if topSongs.count > ArtistTopSongsRanking.collapsedLimit {
+                ArtistTopSongsToggle(isExpanded: $topSongsExpanded, accentColor: accentColor)
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal)
+    }
+
     private var gridBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 artistHeader
+
+                if showsTopSongs {
+                    topSongsGridSection
+                }
 
                 if isLoading {
                     ProgressView()
@@ -328,6 +368,35 @@ struct ArtistDetailView: View {
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                }
+            }
+
+            if showsTopSongs {
+                Section {
+                    ForEach(Array(visibleTopSongs.enumerated()), id: \.element.id) { index, song in
+                        Button {
+                            player.play(songs: visibleTopSongs, startIndex: index)
+                        } label: {
+                            ArtistTopSongRow(rank: index + 1, song: song)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    }
+
+                    if topSongs.count > ArtistTopSongsRanking.collapsedLimit {
+                        ArtistTopSongsToggle(isExpanded: $topSongsExpanded, accentColor: accentColor)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowSeparator(.hidden)
+                    }
+                } header: {
+                    HStack {
+                        Text(String(localized: "top_songs"))
+                            .font(.title3).bold()
+                            .textCase(nil)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.leading, 0)
                 }
             }
 
@@ -639,6 +708,7 @@ struct ArtistDetailView: View {
         populateFromLocal()
         isLoading = detail == nil
         guard !offlineMode.isOffline else {
+            topSongs = []
             isLoading = false
             return
         }
@@ -653,6 +723,25 @@ struct ArtistDetailView: View {
             }
         }
         isLoading = false
+        await loadTopSongs()
+    }
+
+    /// Loaded after the albums are on screen: the ranking is a bonus section,
+    /// it must never delay the page itself.
+    private func loadTopSongs() async {
+        guard !offlineMode.isOffline else {
+            topSongs = []
+            return
+        }
+        let songs = await ArtistTopSongsService.topSongs(
+            artistName: artist.name,
+            albums: sortedAlbums
+        ) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+        }
+        guard !Task.isCancelled else { return }
+        topSongs = songs
+        topSongsExpanded = false
     }
 
     private func populateFromLocal() {

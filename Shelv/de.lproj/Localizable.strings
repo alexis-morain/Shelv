@@ -25,6 +25,8 @@
 "track_collection_duration_hours_format" = "%d Std.";
 "track_collection_duration_hours_minutes_format" = "%d Std. %d Min.";
 "show_more" = "Mehr anzeigen";
+"show_less" = "Weniger anzeigen";
+"top_songs" = "Top-Titel";
 "downloads" = "Downloads";
 "library" = "Bibliothek";
 "libraries" = "Bibliotheken";

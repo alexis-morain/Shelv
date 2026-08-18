@@ -30,6 +30,7 @@ struct ArtistDetailView: View {
     @State private var shareURL: URL?
     @State private var shareErrorMessage: String?
     @State private var artistSongs: [Song]?
+    @State private var topSongsExpanded = false
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
 
@@ -64,6 +65,12 @@ struct ArtistDetailView: View {
                 directionRaw: directionRaw
             )
         )
+    }
+
+    private var visibleTopSongs: [Song] {
+        topSongsExpanded
+            ? vm.topSongs
+            : Array(vm.topSongs.prefix(ArtistTopSongsRanking.collapsedLimit))
     }
 
     private var filteredSongs: [Song] {
@@ -119,6 +126,10 @@ struct ArtistDetailView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
+
+                        if searchQuery.isEmpty && !visibleTopSongs.isEmpty {
+                            topSongsSection
+                        }
 
                         if !vm.albums.isEmpty {
                             if searchQuery.isEmpty {
@@ -294,6 +305,43 @@ struct ArtistDetailView: View {
         } message: { message in
             Text(message)
         }
+    }
+
+    private var topSongsSection: some View {
+        SearchSection(title: String(localized: "top_songs")) {
+            ForEach(Array(visibleTopSongs.enumerated()), id: \.element.id) { index, song in
+                HStack(spacing: 8) {
+                    Text("\(index + 1)")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, alignment: .trailing)
+                        .padding(.leading, 20)
+                    SearchSongRow(song: song) {
+                        appState.player.play(songs: visibleTopSongs, startIndex: index)
+                    } onPlayNext: {
+                        appState.player.addPlayNext(song)
+                    } onAddToQueue: {
+                        appState.player.addToQueue(song)
+                    }
+                }
+            }
+
+            if vm.topSongs.count > ArtistTopSongsRanking.collapsedLimit {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { topSongsExpanded.toggle() }
+                } label: {
+                    Text(topSongsExpanded
+                         ? String(localized: "show_less")
+                         : String(localized: "show_more"))
+                        .font(.subheadline).bold()
+                }
+                .buttonStyle(.link)
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+            }
+        }
+        .padding(.bottom, 8)
     }
 
     private func shareArtist() {
@@ -534,6 +582,7 @@ class ArtistDetailViewModel: ObservableObject {
     @Published var artist: ArtistDetail?
     @Published var albums: [Album] = []
     @Published var biography: String?
+    @Published var topSongs: [Song] = []
     @Published var isLoading: Bool = false
     @Published var isLoadingSongs: Bool = false
     @Published var errorMessage: String?
@@ -562,6 +611,24 @@ class ArtistDetailViewModel: ObservableObject {
             if artist == nil { errorMessage = inlineMessage }
         }
         isLoading = false
+        await loadTopSongs()
+    }
+
+    /// Loaded after the albums are on screen: the ranking is a bonus section,
+    /// it must never delay the page itself.
+    private func loadTopSongs() async {
+        guard !OfflineModeService.shared.isOffline else {
+            topSongs = []
+            return
+        }
+        let songs = await ArtistTopSongsService.topSongs(
+            artistName: artist?.name ?? "",
+            albums: albums
+        ) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+        }
+        guard !Task.isCancelled else { return }
+        topSongs = songs
     }
 
     private func populateFromLocal(artistId: String, artistName: String) {
