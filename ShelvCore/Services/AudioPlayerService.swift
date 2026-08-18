@@ -2883,8 +2883,15 @@ class AudioPlayerService: ObservableObject {
         }.shuffled()
     }
 
-    /// Titel, die zum laufenden Song passen: erst ähnliche Songs, dann ähnliche Künstler, dann das
-    /// Genre. Ein Teil bleibt Zufall, sonst dreht sich der Endlos-Modus um einen einzigen Künstler.
+    /// Titel, die zum laufenden Song passen. Die Kaskade geht von eng nach weit und bricht ab,
+    /// sobald genug beisammen ist: ähnliche Songs, ähnliche Künstler, Genre, Top-Songs des
+    /// Künstlers. Das ist dieselbe Kette, die der Instant Mix benutzt.
+    ///
+    /// Gemessen an einer echten Bibliothek liefert `getSimilarSongs` je nach Titel 8 bis 20
+    /// Treffer, denn der Server kann nur zurückgeben, was auch vorhanden ist. Ein knappes
+    /// Ergebnis darf den Endlos-Modus nicht ausbremsen, deshalb füllt der Zufallstopf den Rest
+    /// des Pools auf. Ein Teil bleibt ohnehin Zufall, sonst dreht sich der Mix um einen
+    /// einzigen Künstler.
     @MainActor
     private func seededInfinityPool(for seed: Song) async -> [Song] {
         let api = SubsonicAPIService.shared
@@ -2906,20 +2913,27 @@ class AudioPlayerService: ObservableObject {
         if similar.count < target, let genre = seed.genre, !genre.isEmpty {
             collect(try? await api.getRandomSongs(size: target * 2, genre: genre, retries: 1))
         }
+        if similar.count < target, let artistName = seed.artist, !artistName.isEmpty {
+            collect(try? await api.getTopSongs(artistName: artistName, count: target, retries: 1))
+        }
         guard !similar.isEmpty else { return [] }
 
         let discovery = (try? await api.getRandomSongs(size: target, retries: 1)) ?? []
-        return InfinityMixPoolBuilder.pool(
+        let queued = infinityQueuedSongIds(seed: seed)
+        let pool = InfinityMixPoolBuilder.pool(
             similar: similar,
             discovery: discovery,
-            excluding: infinityExcludedSongIds(seed: seed)
+            excluding: queued.union(infinityRecentSongIds)
         )
+        guard pool.isEmpty else { return pool }
+        // Kleine Bibliothek: der Verlauf hat alles weggefiltert. Dann lieber eine Wiederholung
+        // als ein leerer Pool, sonst endet der Endlos-Modus beim Zufall.
+        return InfinityMixPoolBuilder.pool(similar: similar, discovery: discovery, excluding: queued)
     }
 
-    /// Alles, was gerade läuft, schon in der Queue steht oder eben erst lief, bleibt draußen.
-    private func infinityExcludedSongIds(seed: Song) -> Set<String> {
-        var excluded = Set(infinityRecentSongIds)
-        excluded.insert(seed.id)
+    /// Alles, was gerade läuft oder schon in der Queue steht, bleibt draußen.
+    private func infinityQueuedSongIds(seed: Song) -> Set<String> {
+        var excluded: Set<String> = [seed.id]
         if let currentId = currentSong?.id { excluded.insert(currentId) }
         excluded.formUnion(upcomingSongs().map(\.id))
         return excluded

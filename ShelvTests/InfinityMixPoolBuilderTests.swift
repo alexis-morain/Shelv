@@ -38,6 +38,18 @@ final class InfinityMixPoolBuilderTests: XCTestCase {
         XCTAssertEqual(pool.map(\.id), ["only-similar", "random-1", "random-2"])
     }
 
+    func testShortSimilarListStillFillsThePoolFromDiscovery() {
+        let pool = InfinityMixPoolBuilder.pool(
+            similar: (1...8).map { song("similar-\($0)") },
+            discovery: (1...40).map { song("random-\($0)") },
+            limit: InfinityMixPoolBuilder.poolSize
+        )
+
+        XCTAssertEqual(pool.count, InfinityMixPoolBuilder.poolSize)
+        XCTAssertEqual(pool.filter { $0.id.hasPrefix("similar-") }.count, 8)
+        XCTAssertEqual(Set(pool.map(\.id)).count, pool.count)
+    }
+
     func testPoolStopsWhenBothSourcesAreExhausted() {
         let pool = InfinityMixPoolBuilder.pool(
             similar: [song("a")],
