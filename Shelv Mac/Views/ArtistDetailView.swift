@@ -32,6 +32,7 @@ struct ArtistDetailView: View {
     @State private var artistSongs: [Song]?
     @State private var topSongsExpanded = false
     @State private var releaseGroup: ArtistReleaseGroup = .all
+    @State private var externalStats: ArtistExternalStats = .none
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
 
@@ -75,6 +76,63 @@ struct ArtistDetailView: View {
         searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: availableAlbums) : []
     }
 
+    private var albumsOnly: [Album] {
+        ArtistDiscography.filter(displayAlbums, to: .albums)
+    }
+
+    private var shortReleases: [Album] {
+        ArtistDiscography.filter(displayAlbums, to: .singlesAndEPs)
+    }
+
+    private var latestRelease: Album? {
+        availableAlbums.max {
+            ($0.year ?? 0, $0.created ?? .distantPast) < ($1.year ?? 0, $1.created ?? .distantPast)
+        }
+    }
+
+    private var showsBanner: Bool {
+        !(vm.artist?.coverArt ?? "").isEmpty
+    }
+
+    /// Releases and plays, from data the page already has. A discography holds
+    /// albums, singles and EPs, so it counts releases.
+    private var artistSubtitle: String? {
+        let albums = vm.albums
+        let count = vm.artist?.albumCount ?? albums.count
+        var parts: [String] = []
+        if count > 0 {
+            parts.append(String(format: String(localized: "artist_release_count_format"), count))
+        }
+        let plays = albums.reduce(0) { $0 + ($1.playCount ?? 0) }
+        if plays > 0 {
+            parts.append(String(format: String(localized: "artist_play_count_format"), plays))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var artistFootnote: String? {
+        var parts: [String] = []
+        if let listeners = externalStats.listeners {
+            parts.append(String(
+                format: String(localized: "artist_lastfm_listeners_format"),
+                listeners.formatted(.number)
+            ))
+        }
+        if let rank = externalStats.worldRank {
+            parts.append(String(format: String(localized: "artist_world_rank_format"), rank))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var lastFmURL: URL? {
+        vm.lastFmURLString.flatMap(URL.init(string:))
+    }
+
+    private var musicBrainzURL: URL? {
+        guard let id = vm.musicBrainzId, !id.isEmpty else { return nil }
+        return URL(string: "https://musicbrainz.org/artist/\(id)")
+    }
+
     private var visibleTopSongs: [Song] {
         topSongsExpanded
             ? vm.topSongs
@@ -109,6 +167,20 @@ struct ArtistDetailView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
+                        if showsBanner {
+                            ArtistBannerHeader(
+                                coverArtID: vm.artist?.coverArt,
+                                name: vm.artist?.name ?? artistName,
+                                subtitle: artistSubtitle,
+                                footnote: artistFootnote
+                            ) {
+                                ViewThatFits(in: .horizontal) {
+                                    actionButtons(iconOnly: false, compact: false)
+                                    actionButtons(iconOnly: true, compact: false)
+                                    actionButtons(iconOnly: true, compact: true)
+                                }
+                            }
+                        } else {
                         HStack(alignment: .top, spacing: 24) {
                             CoverArtView(url: coverURL, size: 120, isCircle: true)
                                 .shadow(color: .black.opacity(0.2), radius: 10)
@@ -134,6 +206,7 @@ struct ArtistDetailView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
+                        }
 
                         if searchQuery.isEmpty && !visibleTopSongs.isEmpty {
                             topSongsSection
@@ -192,20 +265,24 @@ struct ArtistDetailView: View {
                             }
 
                             if isGrid && searchQuery.isEmpty {
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)],
-                                    spacing: 20
-                                ) {
-                                    ForEach(displayAlbums) { album in
-                                        NavigationLink(value: album) {
-                                            AlbumGridItem(album: album)
-                                                .equatable()
-                                        }
-                                        .buttonStyle(.plain)
-                                        .albumContextMenu(album)
+                                VStack(alignment: .leading, spacing: 24) {
+                                    if let latestRelease {
+                                        ArtistLatestReleaseCard(album: latestRelease, accentColor: themeColor)
+                                    }
+                                    if !albumsOnly.isEmpty {
+                                        ArtistReleaseShelf(
+                                            title: String(localized: "albums"),
+                                            albums: albumsOnly
+                                        )
+                                    }
+                                    if !shortReleases.isEmpty {
+                                        ArtistReleaseShelf(
+                                            title: String(localized: "release_group_singles_eps"),
+                                            albums: shortReleases
+                                        )
                                     }
                                 }
-                                .padding(20)
+                                .padding(.bottom, 8)
                             } else if searchQuery.isEmpty {
                                 LazyVStack(spacing: 0) {
                                     ForEach(displayAlbums) { album in
@@ -271,6 +348,7 @@ struct ArtistDetailView: View {
                                     .font(.title3.bold())
                                 ArtistBiographyBox(biography: bio)
                                     .frame(maxWidth: 640)
+                                ArtistLinksRow(lastFmURL: lastFmURL, musicBrainzURL: musicBrainzURL)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 20)
@@ -306,6 +384,7 @@ struct ArtistDetailView: View {
         }
         .task(id: "\(artistId)|\(musicLibraries.revision)") {
             await vm.load(artistId: artistId, artistName: artistName)
+            await loadExternalStats()
         }
         .task(id: songSearchLoadID) {
             guard !searchQuery.isEmpty, !availableAlbums.isEmpty else {
@@ -410,6 +489,21 @@ struct ArtistDetailView: View {
             }
         }
         .padding(.bottom, 8)
+    }
+
+    /// Optional and last: nothing on this page depends on it, and it is the
+    /// only request that leaves the user's own server.
+    private func loadExternalStats() async {
+        guard !offlineMode.isOffline, ArtistExternalStatsSettings.isEnabled else {
+            externalStats = .none
+            return
+        }
+        let stats = await ArtistExternalStatsService.shared.stats(
+            artistName: vm.artist?.name ?? artistName,
+            musicBrainzId: vm.musicBrainzId
+        )
+        guard !Task.isCancelled else { return }
+        externalStats = stats
     }
 
     private func shareArtist() {
@@ -645,17 +739,6 @@ struct ArtistDetailView: View {
     }
 }
 
-extension ArtistReleaseGroup {
-    /// Localised in each UI target, the way the other sort and filter enums are.
-    var label: String {
-        switch self {
-        case .all: String(localized: "release_group_all")
-        case .albums: String(localized: "albums")
-        case .singlesAndEPs: String(localized: "release_group_singles_eps")
-        }
-    }
-}
-
 @MainActor
 class ArtistDetailViewModel: ObservableObject {
     @Published var artist: ArtistDetail?
@@ -663,6 +746,8 @@ class ArtistDetailViewModel: ObservableObject {
     @Published var biography: String?
     @Published var topSongs: [Song] = []
     @Published var similarArtists: [Artist] = []
+    @Published var musicBrainzId: String?
+    @Published var lastFmURLString: String?
     @Published var isLoading: Bool = false
     @Published var isLoadingSongs: Bool = false
     @Published var errorMessage: String?
@@ -691,6 +776,8 @@ class ArtistDetailViewModel: ObservableObject {
             let info = try? await artistInfo
             biography = info?.biography?.strippingHTML
             similarArtists = info?.similarArtist ?? []
+            musicBrainzId = info?.musicBrainzId
+            lastFmURLString = info?.lastFmUrl
         } catch {
             let inlineMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             populateFromLocal(artistId: artistId, artistName: artistName)
