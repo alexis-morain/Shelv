@@ -34,11 +34,16 @@ nonisolated enum DemoContent {
         let artistKey: String
         let artistName: String
         let year: Int
+        /// OpenSubsonic release types, so the demo shows the discography filter.
+        var releaseTypes: [String]? = nil
+        /// Short releases reuse the cover of the artist's album, the asset
+        /// catalogue holds one image per album key.
+        var coverKey: String? = nil
         let tracks: [(String, Int)]   // (Titel, Sekunden)
 
         var albumId: String { "demo-album-\(key)" }
         var artistId: String { "demo-artist-\(artistKey)" }
-        var cover: String { "demo_cover_\(key)" }
+        var cover: String { "demo_cover_\(coverKey ?? key)" }
     }
 
     private static let specs: [AlbumSpec] = [
@@ -88,6 +93,27 @@ nonisolated enum DemoContent {
             ("Dune", 213), ("Ruins of Quiet", 298), ("Sandglass", 191), ("Heat Mirage", 245),
             ("Empty Quarter", 268), ("Goldenrod", 202), ("Last Oasis", 257),
         ]),
+        AlbumSpec(key: "carrier_wave", title: "Carrier Wave", artistKey: "deadlight_protocol",
+                  artistName: "Deadlight Protocol", year: 2025,
+                  releaseTypes: ["single"], coverKey: "depth_unknown", tracks: [
+            ("Carrier Wave", 268),
+        ]),
+        AlbumSpec(key: "night_watch", title: "Night Watch", artistKey: "deadlight_protocol",
+                  artistName: "Deadlight Protocol", year: 2023,
+                  releaseTypes: ["ep"], coverKey: "depth_unknown", tracks: [
+            ("Night Watch", 241), ("Signal Drift", 197), ("Watchtower", 263),
+        ]),
+        AlbumSpec(key: "second_light", title: "Second Light", artistKey: "deadlight_protocol",
+                  artistName: "Deadlight Protocol", year: 2021,
+                  releaseTypes: ["album"], coverKey: "depth_unknown", tracks: [
+            ("Second Light", 224), ("Ash Field", 251), ("Undertone", 196), ("Coastline", 268),
+            ("Half Signal", 233), ("Second Dark", 289),
+        ]),
+        AlbumSpec(key: "quiet_hands_single", title: "Quiet Hands", artistKey: "pale_signal",
+                  artistName: "Pale Signal", year: 2021,
+                  releaseTypes: ["single"], coverKey: "after_last_light", tracks: [
+            ("Quiet Hands (Live)", 214),
+        ]),
     ]
 
     // MARK: - Abgeleitete Objekte
@@ -108,7 +134,7 @@ nonisolated enum DemoContent {
                      artistId: spec.artistId, coverArt: spec.cover, songCount: s.count,
                      duration: s.reduce(0) { $0 + ($1.duration ?? 0) }, year: spec.year,
                      genre: "Ambient", playCount: s.reduce(0) { $0 + ($1.playCount ?? 0) },
-                     starred: nil, created: nil)
+                     starred: nil, created: nil, releaseTypes: spec.releaseTypes)
     }
 
     static let albums: [Album] = specs.map(album(for:))
@@ -119,10 +145,15 @@ nonisolated enum DemoContent {
     private static let albumById: [String: Album] =
         Dictionary(uniqueKeysWithValues: albums.map { ($0.id, $0) })
 
-    static let artists: [Artist] = specs.map { spec in
-        Artist(id: spec.artistId, name: spec.artistName, albumCount: 1,
-               coverArt: "demo_artist_\(spec.artistKey)", starred: nil)
-    }
+    static let artists: [Artist] = {
+        var seen = Set<String>()
+        return specs.compactMap { spec in
+            guard seen.insert(spec.artistId).inserted else { return nil }
+            let releases = specs.filter { $0.artistId == spec.artistId }.count
+            return Artist(id: spec.artistId, name: spec.artistName, albumCount: releases,
+                          coverArt: "demo_artist_\(spec.artistKey)", starred: nil)
+        }
+    }()
 
     // MARK: - API-Antworten
 
@@ -141,10 +172,10 @@ nonisolated enum DemoContent {
             + "This biography is part of the demo library and does not describe a real artist."
         }
         guard similarArtistCount > 0 else {
-            return ArtistInfo(biography: biography, similarArtist: nil)
+            return ArtistInfo(biography: biography, similarArtist: nil, musicBrainzId: nil)
         }
         let others = artists.filter { $0.id != id }.prefix(similarArtistCount)
-        return ArtistInfo(biography: biography, similarArtist: Array(others))
+        return ArtistInfo(biography: biography, similarArtist: Array(others), musicBrainzId: nil)
     }
 
     static func artistDetail(id: String) -> ArtistDetail? {

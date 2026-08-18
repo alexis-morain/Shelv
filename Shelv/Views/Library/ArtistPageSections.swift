@@ -59,3 +59,62 @@ struct ArtistSimilarArtistsRow: View {
         .scrollIndicators(.hidden)
     }
 }
+
+/// Full-width artist photo behind the name and the playback actions.
+///
+/// Servers hand out square artist images (Navidrome caps them at 1000 px), so
+/// the square is cropped to a band around its centre, where portraits keep the
+/// face. Pages whose artist has no image keep the compact header instead.
+struct ArtistBannerHeader<Actions: View>: View {
+    let artist: Artist
+    let subtitle: String?
+    /// Public figures from outside the server, when the user asked for them.
+    let footnote: String?
+    let accentColor: Color
+    @ViewBuilder let actions: Actions
+
+    private let height: CGFloat = 260
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            GeometryReader { geo in
+                AlbumArtView(coverArtId: artist.coverArt, size: 1000, cornerRadius: 0)
+                    .frame(width: geo.size.width, height: geo.size.width)
+                    .offset(y: -(geo.size.width - height) / 2)
+            }
+            .frame(height: height)
+            .clipped()
+            .overlay(alignment: .bottomLeading) {
+                LinearGradient(
+                    colors: [.clear, Color(UIColor.systemBackground)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
+            }
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(artist.name)
+                        .font(.largeTitle).bold()
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let footnote {
+                        Text(footnote)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 12)
+            }
+
+            actions
+                .padding(.horizontal)
+        }
+    }
+}

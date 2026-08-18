@@ -33,6 +33,8 @@ struct ArtistDetailView: View {
     @State private var topSongs: [Song] = []
     @State private var topSongsExpanded = false
     @State private var similarArtists: [Artist] = []
+    @State private var externalStats: ArtistExternalStats = .none
+    @State private var musicBrainzId: String?
     @State private var releaseGroup: ArtistReleaseGroup = .all
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
@@ -106,6 +108,42 @@ struct ArtistDetailView: View {
         return ArtistDiscography.filter(filteredAlbums, to: releaseGroup)
     }
 
+    /// Albums and play counts the server already reported, in place of the
+    /// monthly-listener line a commercial service would show here.
+    private var artistSubtitle: String? {
+        let albums = detail?.album ?? []
+        let albumCount = detail?.albumCount ?? artist.albumCount ?? albums.count
+        var parts: [String] = []
+        if albumCount > 0 {
+            parts.append(String(format: String(localized: "artist_release_count_format"), albumCount))
+        }
+        let plays = albums.reduce(0) { $0 + ($1.playCount ?? 0) }
+        if plays > 0 {
+            parts.append(String(format: String(localized: "artist_play_count_format"), plays))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Second line of the banner: public numbers, only when the user turned
+    /// them on and a service answered.
+    private var artistFootnote: String? {
+        var parts: [String] = []
+        if let listeners = externalStats.listeners {
+            parts.append(String(
+                format: String(localized: "artist_lastfm_listeners_format"),
+                listeners.formatted(.number)
+            ))
+        }
+        if let rank = externalStats.worldRank {
+            parts.append(String(format: String(localized: "artist_world_rank_format"), rank))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var showsBanner: Bool {
+        !(artist.coverArt ?? "").isEmpty
+    }
+
     private var showsSimilarArtists: Bool {
         searchQuery.isEmpty && !similarArtists.isEmpty
     }
@@ -128,8 +166,9 @@ struct ArtistDetailView: View {
                 listBody
             }
         }
+
         .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
-        .navigationTitle(artist.name)
+        .navigationTitle(showsBanner ? "" : artist.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if showFavoriteActions && !offlineMode.isOffline {
@@ -211,7 +250,26 @@ struct ArtistDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var artistHeader: some View {
+        if showsBanner {
+            ArtistBannerHeader(
+                artist: artist,
+                subtitle: artistSubtitle,
+                footnote: artistFootnote,
+                accentColor: accentColor
+            ) {
+                HStack(spacing: 14) {
+                    playButton
+                    shuffleButton
+                }
+            }
+        } else {
+            compactArtistHeader
+        }
+    }
+
+    private var compactArtistHeader: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 16) {
                 AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
@@ -225,47 +283,8 @@ struct ArtistDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     HStack(spacing: 14) {
-                        Button {
-                            let albums = sortedAlbums
-                            guard !albums.isEmpty else { return }
-                            Task {
-                                let songs = await fetchAllSongs(from: albums)
-                                guard !songs.isEmpty else { return }
-                                player.play(songs: songs, startIndex: 0)
-                            }
-                        } label: {
-                            Label(String(localized: "play"), systemImage: "play.fill")
-                                .labelStyle(.titleAndIcon)
-                                .font(.body).bold()
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(accentColor)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isLoading)
-
-                        Button {
-                            let albums = sortedAlbums
-                            guard !albums.isEmpty else { return }
-                            Task {
-                                let songs = await fetchAllSongs(from: albums)
-                                guard !songs.isEmpty else { return }
-                                player.playShuffled(songs: songs)
-                            }
-                        } label: {
-                            Label(String(localized: "shuffle"), systemImage: "shuffle")
-                                .labelStyle(.titleAndIcon)
-                                .font(.body).bold()
-                                .foregroundStyle(accentColor)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(accentColor.opacity(0.15))
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isLoading)
+                        playButton
+                        shuffleButton
                     }
                 }
             }
@@ -273,6 +292,52 @@ struct ArtistDetailView: View {
         }
         .padding(.horizontal)
         .padding(.top, 16)
+    }
+
+    private var playButton: some View {
+        Button {
+            let albums = sortedAlbums
+            guard !albums.isEmpty else { return }
+            Task {
+                let songs = await fetchAllSongs(from: albums)
+                guard !songs.isEmpty else { return }
+                player.play(songs: songs, startIndex: 0)
+            }
+        } label: {
+            Label(String(localized: "play"), systemImage: "play.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.body).bold()
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(accentColor)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+
+    private var shuffleButton: some View {
+        Button {
+            let albums = sortedAlbums
+            guard !albums.isEmpty else { return }
+            Task {
+                let songs = await fetchAllSongs(from: albums)
+                guard !songs.isEmpty else { return }
+                player.playShuffled(songs: songs)
+            }
+        } label: {
+            Label(String(localized: "shuffle"), systemImage: "shuffle")
+                .labelStyle(.titleAndIcon)
+                .font(.body).bold()
+                .foregroundStyle(accentColor)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(accentColor.opacity(0.15))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
     }
 
     private var topSongsGridSection: some View {
@@ -779,6 +844,7 @@ struct ArtistDetailView: View {
         guard !offlineMode.isOffline else {
             topSongs = []
             similarArtists = []
+            externalStats = .none
             isLoading = false
             return
         }
@@ -792,6 +858,7 @@ struct ArtistDetailView: View {
             let info = try? await artistInfo
             biography = info?.biography?.strippingHTML
             similarArtists = info?.similarArtist ?? []
+            musicBrainzId = info?.musicBrainzId
         } catch {
             if detail == nil {
                 errorMessage = error.localizedDescription
@@ -799,6 +866,22 @@ struct ArtistDetailView: View {
         }
         isLoading = false
         await loadTopSongs()
+        await loadExternalStats()
+    }
+
+    /// Optional and last: nothing on this page depends on it, and it is the
+    /// only request that leaves the user's own server.
+    private func loadExternalStats() async {
+        guard !offlineMode.isOffline, ArtistExternalStatsSettings.isEnabled else {
+            externalStats = .none
+            return
+        }
+        let stats = await ArtistExternalStatsService.shared.stats(
+            artistName: artist.name,
+            musicBrainzId: musicBrainzId
+        )
+        guard !Task.isCancelled else { return }
+        externalStats = stats
     }
 
     /// Loaded after the albums are on screen: the ranking is a bonus section,

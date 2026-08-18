@@ -323,6 +323,8 @@ nonisolated struct ArtistInfo: Decodable, Sendable {
     /// Artists the server considers related. Navidrome only returns the ones
     /// present in the library, so every entry is browsable.
     let similarArtist: [Artist]?
+    /// Identifies the artist outside the server, for services that key on it.
+    let musicBrainzId: String?
 }
 
 nonisolated struct SearchResult: Decodable, Sendable {
@@ -1504,7 +1506,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             URLQueryItem(name: "count", value: "\(similarArtistCount)")
         ]).response
         try check(status: body.status, error: body.error)
-        return body.artistInfo2 ?? ArtistInfo(biography: nil, similarArtist: nil)
+        return body.artistInfo2 ?? ArtistInfo(biography: nil, similarArtist: nil, musicBrainzId: nil)
     }
 
     func getSong(id: String, retries: Int = 0) async throws -> Song {
