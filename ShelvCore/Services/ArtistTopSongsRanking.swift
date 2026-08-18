@@ -14,6 +14,13 @@ nonisolated enum ArtistTopSongsRanking {
     /// per release just to fill a five-row list.
     static let fallbackAlbumLimit = 25
 
+    /// What `getTopSongs` is asked for, which is NOT the number of songs it
+    /// answers with: Navidrome reads that many entries from its ranking source
+    /// and then keeps the ones that exist in the library. Asking for 10 returned
+    /// 2 songs for one artist here, asking for 100 returned 15, at the same
+    /// cost of one request. Ask wide, show `limit`.
+    static let serverScanCount = 100
+
     /// The server ranking, kept in the order the server sent it.
     static func rankServerSongs(_ songs: [Song], limit: Int = limit) -> [Song] {
         Array(deduplicatedByTitle(songs).prefix(limit))

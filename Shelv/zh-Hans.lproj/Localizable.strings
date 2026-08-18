@@ -27,6 +27,9 @@
 "show_more" = "显示更多";
 "show_less" = "收起";
 "top_songs" = "热门歌曲";
+"latest_release" = "最新发行";
+"last_fm" = "Last.fm";
+"musicbrainz" = "MusicBrainz";
 "artist_release_count_format" = "%d 张作品";
 "artist_lastfm_listeners_format" = "%@ 位 Last.fm 听众";
 "artist_world_rank_format" = "本月全球第 %d 位";

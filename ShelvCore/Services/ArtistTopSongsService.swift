@@ -18,7 +18,10 @@ nonisolated enum ArtistTopSongsService {
         loadAlbumSongs: @escaping @Sendable (String) async -> [Song]
     ) async -> [Song] {
         let ranked = ArtistTopSongsRanking.rankServerSongs(
-            await fetchServerRanking(artistName: artistName, limit: limit),
+            await fetchServerRanking(
+                artistName: artistName,
+                count: ArtistTopSongsRanking.serverScanCount
+            ),
             limit: limit
         )
         guard ranked.isEmpty else { return ranked }
@@ -33,11 +36,11 @@ nonisolated enum ArtistTopSongsService {
         return ArtistTopSongsRanking.rankByPlayCount(songs, limit: limit)
     }
 
-    private static func fetchServerRanking(artistName: String, limit: Int) async -> [Song] {
+    private static func fetchServerRanking(artistName: String, count: Int) async -> [Song] {
         guard !artistName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         return (try? await SubsonicAPIService.shared.getTopSongs(
             artistName: artistName,
-            count: limit,
+            count: count,
             retries: 1
         )) ?? []
     }

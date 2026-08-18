@@ -35,6 +35,7 @@ struct ArtistDetailView: View {
     @State private var similarArtists: [Artist] = []
     @State private var externalStats: ArtistExternalStats = .none
     @State private var musicBrainzId: String?
+    @State private var lastFmURLString: String?
     @State private var releaseGroup: ArtistReleaseGroup = .all
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
@@ -97,8 +98,34 @@ struct ArtistDetailView: View {
         searchQuery.isEmpty && !visibleTopSongs.isEmpty
     }
 
+    /// The list layout keeps a single list, so it keeps the filter. The grid
+    /// layout splits albums and short releases into their own shelves instead.
     private var releaseGroups: [ArtistReleaseGroup] {
         searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: sortedAlbums) : []
+    }
+
+    private var albumsOnly: [Album] {
+        ArtistDiscography.filter(sortedAlbums, to: .albums)
+    }
+
+    private var shortReleases: [Album] {
+        ArtistDiscography.filter(sortedAlbums, to: .singlesAndEPs)
+    }
+
+    /// Newest by release year, then by the date the server first saw it.
+    private var latestRelease: Album? {
+        sortedAlbums.max {
+            ($0.year ?? 0, $0.created ?? .distantPast) < ($1.year ?? 0, $1.created ?? .distantPast)
+        }
+    }
+
+    private var lastFmURL: URL? {
+        lastFmURLString.flatMap(URL.init(string:))
+    }
+
+    private var musicBrainzURL: URL? {
+        guard let musicBrainzId, !musicBrainzId.isEmpty else { return nil }
+        return URL(string: "https://musicbrainz.org/artist/\(musicBrainzId)")
     }
 
     /// The albums actually shown: the search filter first, then the
@@ -385,19 +412,13 @@ struct ArtistDetailView: View {
                         .padding(.horizontal)
                         .padding(.top, 40)
                         .frame(maxWidth: .infinity)
-                } else if !filteredAlbums.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(String(localized: searchQuery.isEmpty ? "discography" : "albums"))
-                            .font(.title3).bold()
-
-                        if !releaseGroups.isEmpty {
-                            ArtistReleaseGroupPicker(selection: $releaseGroup, groups: releaseGroups)
-                        }
-                    }
-                    .padding(.horizontal)
+                } else if !searchQuery.isEmpty {
+                    Text(String(localized: "albums"))
+                        .font(.title3).bold()
+                        .padding(.horizontal)
 
                     LazyVGrid(columns: columns, spacing: 20) {
-                        ForEach(displayedAlbums) { album in
+                        ForEach(filteredAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
                                 AlbumCardView(
                                     album: album,
@@ -411,6 +432,26 @@ struct ArtistDetailView: View {
                         }
                     }
                     .padding(.horizontal)
+                } else {
+                    if let latestRelease {
+                        ArtistLatestReleaseCard(album: latestRelease, accentColor: accentColor)
+                    }
+
+                    if !albumsOnly.isEmpty {
+                        ArtistReleaseShelf(
+                            title: String(localized: "albums"),
+                            albums: albumsOnly,
+                            personalization: personalization
+                        )
+                    }
+
+                    if !shortReleases.isEmpty {
+                        ArtistReleaseShelf(
+                            title: String(localized: "release_group_singles_eps"),
+                            albums: shortReleases,
+                            personalization: personalization
+                        )
+                    }
                 }
 
                 if !searchQuery.isEmpty {
@@ -453,6 +494,8 @@ struct ArtistDetailView: View {
                             .font(.title3).bold()
 
                         ArtistBiographyBox(biography: bio, accentColor: accentColor)
+
+                        ArtistLinksRow(lastFmURL: lastFmURL, musicBrainzURL: musicBrainzURL)
                     }
                     .padding(.horizontal)
                 }
@@ -859,6 +902,7 @@ struct ArtistDetailView: View {
             biography = info?.biography?.strippingHTML
             similarArtists = info?.similarArtist ?? []
             musicBrainzId = info?.musicBrainzId
+            lastFmURLString = info?.lastFmUrl
         } catch {
             if detail == nil {
                 errorMessage = error.localizedDescription

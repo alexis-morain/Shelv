@@ -27,6 +27,9 @@
 "show_more" = "Show more";
 "show_less" = "Show less";
 "top_songs" = "Top Songs";
+"latest_release" = "Latest Release";
+"last_fm" = "Last.fm";
+"musicbrainz" = "MusicBrainz";
 "artist_release_count_format" = "%d releases";
 "artist_lastfm_listeners_format" = "%@ Last.fm listeners";
 "artist_world_rank_format" = "#%d worldwide this month";

@@ -325,6 +325,8 @@ nonisolated struct ArtistInfo: Decodable, Sendable {
     let similarArtist: [Artist]?
     /// Identifies the artist outside the server, for services that key on it.
     let musicBrainzId: String?
+    /// The artist's Last.fm page, when the server resolved one.
+    let lastFmUrl: String?
 }
 
 nonisolated struct SearchResult: Decodable, Sendable {
@@ -1506,7 +1508,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             URLQueryItem(name: "count", value: "\(similarArtistCount)")
         ]).response
         try check(status: body.status, error: body.error)
-        return body.artistInfo2 ?? ArtistInfo(biography: nil, similarArtist: nil, musicBrainzId: nil)
+        return body.artistInfo2 ?? ArtistInfo(biography: nil, similarArtist: nil, musicBrainzId: nil, lastFmUrl: nil)
     }
 
     func getSong(id: String, retries: Int = 0) async throws -> Song {

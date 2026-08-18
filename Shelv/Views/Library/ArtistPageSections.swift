@@ -93,20 +93,28 @@ struct ArtistBannerHeader<Actions: View>: View {
                 .allowsHitTesting(false)
             }
             .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(artist.name)
-                        .font(.largeTitle).bold()
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.7)
-                    if let subtitle {
-                        Text(subtitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    if let footnote {
-                        Text(footnote)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                HStack(alignment: .bottom, spacing: 14) {
+                    // The wide photo is often a group or a stage shot; the round
+                    // portrait is what identifies the artist at a glance.
+                    AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
+                        .frame(width: 84, height: 84)
+                        .overlay(Circle().stroke(.background.opacity(0.6), lineWidth: 2))
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(artist.name)
+                            .font(.title).bold()
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.7)
+                        if let subtitle {
+                            Text(subtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let footnote {
+                            Text(footnote)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .padding(.horizontal)
@@ -116,5 +124,116 @@ struct ArtistBannerHeader<Actions: View>: View {
             actions
                 .padding(.horizontal)
         }
+    }
+}
+
+/// A horizontal shelf of releases, the way the rest of Discover presents
+/// albums. Splitting albums from singles reads better than one long grid with
+/// a filter on top of it.
+struct ArtistReleaseShelf: View {
+    let title: String
+    let albums: [Album]
+    let personalization: PersonalizationSwipeConfiguration
+
+    private let itemWidth: CGFloat = 150
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.title3).bold()
+                .padding(.horizontal)
+
+            ScrollView(.horizontal) {
+                LazyHStack(alignment: .top, spacing: 16) {
+                    ForEach(albums) { album in
+                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                            AlbumCardView(
+                                album: album,
+                                personalization: personalization,
+                                showArtist: false,
+                                showYear: true
+                            )
+                            .equatable()
+                            .frame(width: itemWidth)
+                        }
+                        .buttonStyle(.plain)
+                        .albumContextMenu(album, showPreview: false)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+}
+
+/// The artist's newest release, pulled out of the shelves so it is the first
+/// thing offered after the top songs.
+struct ArtistLatestReleaseCard: View {
+    let album: Album
+    let accentColor: Color
+
+    var body: some View {
+        NavigationLink(destination: AlbumDetailView(album: album)) {
+            HStack(spacing: 16) {
+                AlbumArtView(coverArtId: album.coverArt, size: 300)
+                    .frame(width: 92, height: 92)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "latest_release"))
+                        .font(.caption).bold()
+                        .foregroundStyle(accentColor)
+                    Text(album.name)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    if !album.displayYear.isEmpty {
+                        Text(album.displayYear)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal)
+    }
+}
+
+/// External pages for the artist, as chips under the biography.
+struct ArtistLinksRow: View {
+    let lastFmURL: URL?
+    let musicBrainzURL: URL?
+
+    var body: some View {
+        if lastFmURL != nil || musicBrainzURL != nil {
+            HStack(spacing: 10) {
+                if let lastFmURL {
+                    chip(String(localized: "last_fm"), url: lastFmURL)
+                }
+                if let musicBrainzURL {
+                    chip(String(localized: "musicbrainz"), url: musicBrainzURL)
+                }
+            }
+        }
+    }
+
+    private func chip(_ title: String, url: URL) -> some View {
+        Link(destination: url) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.up.right")
+                    .font(.caption2)
+                Text(title)
+                    .font(.subheadline)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.secondary.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }

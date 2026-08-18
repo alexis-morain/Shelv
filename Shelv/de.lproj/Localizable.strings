@@ -27,6 +27,9 @@
 "show_more" = "Mehr anzeigen";
 "show_less" = "Weniger anzeigen";
 "top_songs" = "Top-Titel";
+"latest_release" = "Neueste Veröffentlichung";
+"last_fm" = "Last.fm";
+"musicbrainz" = "MusicBrainz";
 "artist_release_count_format" = "%d Veröffentlichungen";
 "artist_lastfm_listeners_format" = "%@ Last.fm-Hörer";
 "artist_world_rank_format" = "#%d weltweit diesen Monat";

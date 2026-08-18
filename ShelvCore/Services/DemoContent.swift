@@ -172,10 +172,10 @@ nonisolated enum DemoContent {
             + "This biography is part of the demo library and does not describe a real artist."
         }
         guard similarArtistCount > 0 else {
-            return ArtistInfo(biography: biography, similarArtist: nil, musicBrainzId: nil)
+            return ArtistInfo(biography: biography, similarArtist: nil, musicBrainzId: nil, lastFmUrl: nil)
         }
         let others = artists.filter { $0.id != id }.prefix(similarArtistCount)
-        return ArtistInfo(biography: biography, similarArtist: Array(others), musicBrainzId: nil)
+        return ArtistInfo(biography: biography, similarArtist: Array(others), musicBrainzId: nil, lastFmUrl: nil)
     }
 
     static func artistDetail(id: String) -> ArtistDetail? {
