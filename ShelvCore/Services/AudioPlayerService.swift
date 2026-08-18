@@ -247,6 +247,7 @@ class AudioPlayerService: ObservableObject {
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("infinityModeEnabled") private var infinityModeEnabled = false
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
+    @AppStorage("infinityMixSeededEnabled") private var infinityMixSeededEnabled = true
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
     private var gaplessPreloadURL: URL? = nil
@@ -2668,6 +2669,10 @@ class AudioPlayerService: ObservableObject {
     // MARK: - Endlos-Modus (Radio)
 
     private var infinityPool: [Song] = []
+    /// Song, aus dem der aktuelle Pool gebaut wurde, nil bei einem rein zufälligen Pool.
+    private var infinityPoolSeedId: String?
+    /// Zuletzt vom Endlos-Modus eingereihte Titel, damit sich der Mix nicht im Kreis dreht.
+    private var infinityRecentSongIds: [String] = []
     private var infinityTopUpTask: Task<Void, Never>?
     /// IDs der Titel, die der Endlos-Modus automatisch vorausgelegt hat. Sobald der User selbst
     /// etwas einreiht (Add to Queue / Play Next), werden diese Songs wieder entfernt — der bewusst
@@ -2678,7 +2683,7 @@ class AudioPlayerService: ObservableObject {
         min(max(infinityMixAheadCount, 1), 10)
     }
 
-    /// Hält bei aktivem Endlos-Modus die gewählte Anzahl Zufallstitel bereit.
+    /// Hält bei aktivem Endlos-Modus die gewählte Anzahl Titel bereit.
     /// - `startIfIdle`: nur `true` beim manuellen Einschalten des Toggles — dann startet bei
     ///   nichts-läuft sofort ein Zufallstitel. Beim Songwechsel `false`, damit nach einem Stop
     ///   die Wiedergabe nicht ungewollt wieder anspringt.
@@ -2730,6 +2735,9 @@ class AudioPlayerService: ObservableObject {
     }
 
     func refreshInfinityMixWindow() {
+        // Der Pool hängt an den Einstellungen, nach einer Änderung also neu aufbauen.
+        infinityPool.removeAll()
+        infinityPoolSeedId = nil
         syncInfinityPendingSongIds()
         trimInfinityPendingSongs(to: clampedInfinityMixAheadCount)
         guard infinityModeEnabled else { return }
@@ -2750,6 +2758,7 @@ class AudioPlayerService: ObservableObject {
             userQueue.append(song)
         }
         infinityPendingSongIds.append(song.id)
+        infinityRecentSongIds = InfinityMixPoolBuilder.appendingHistory(infinityRecentSongIds, adding: [song.id])
         if save { saveState() }
         return true
     }
@@ -2813,6 +2822,7 @@ class AudioPlayerService: ObservableObject {
 
     @MainActor
     private func nextInfinitySong() async -> Song? {
+        discardInfinityPoolIfSeedChanged()
         if infinityPool.isEmpty { await refillInfinityPool() }
         while !infinityPool.isEmpty {
             let song = infinityPool.removeFirst()
@@ -2821,8 +2831,32 @@ class AudioPlayerService: ObservableObject {
         return nil
     }
 
+    /// Ein Pool gehört zu dem Titel, aus dem er gebaut wurde. Startet der Nutzer selbst etwas
+    /// anderes, wird er verworfen, sonst passt der Nachschub weiter zum vorherigen Titel.
+    private func discardInfinityPoolIfSeedChanged() {
+        guard infinityMixSeededEnabled, !infinityPool.isEmpty, infinityPoolSeedId != nil else { return }
+        guard let currentId = currentSong?.id else { return }
+        guard currentId != infinityPoolSeedId, !infinityRecentSongIds.contains(currentId) else { return }
+        infinityPool.removeAll()
+        infinityPoolSeedId = nil
+    }
+
     @MainActor
     private func refillInfinityPool() async {
+        // Erst versuchen, an den laufenden Titel anzuknüpfen. Ohne Seed, offline oder wenn der
+        // Server nichts Passendes kennt, bleibt es beim Zufall.
+        if infinityMixSeededEnabled,
+           !OfflineModeService.shared.isOffline,
+           let seed = currentSong,
+           !isRadioPlayback {
+            let seeded = await seededInfinityPool(for: seed)
+            if !seeded.isEmpty {
+                infinityPool = seeded
+                infinityPoolSeedId = seed.id
+                return
+            }
+        }
+        infinityPoolSeedId = nil
         // Online: bis zu 3 Versuche (mit kleinem Backoff), bevor auf Downloads ausgewichen wird.
         // Offline: gar nicht erst beim Server versuchen — direkt Downloads (dort ist garantiert was).
         if !OfflineModeService.shared.isOffline {
@@ -2847,6 +2881,48 @@ class AudioPlayerService: ObservableObject {
                 suffix: rec.fileExtension, bitRate: nil, replayGain: nil
             )
         }.shuffled()
+    }
+
+    /// Titel, die zum laufenden Song passen: erst ähnliche Songs, dann ähnliche Künstler, dann das
+    /// Genre. Ein Teil bleibt Zufall, sonst dreht sich der Endlos-Modus um einen einzigen Künstler.
+    @MainActor
+    private func seededInfinityPool(for seed: Song) async -> [Song] {
+        let api = SubsonicAPIService.shared
+        let target = InfinityMixPoolBuilder.poolSize
+        var similar: [Song] = []
+        var seen: Set<String> = [seed.id]
+
+        func collect(_ songs: [Song]?) {
+            guard let songs else { return }
+            for song in songs where seen.insert(song.id).inserted {
+                similar.append(song)
+            }
+        }
+
+        collect(try? await api.getSimilarSongs(id: seed.id, count: target * 2, retries: 1))
+        if similar.count < target, let artistId = seed.artistId, !artistId.isEmpty {
+            collect(try? await api.getSimilarSongs2(id: artistId, count: target * 2, retries: 1))
+        }
+        if similar.count < target, let genre = seed.genre, !genre.isEmpty {
+            collect(try? await api.getRandomSongs(size: target * 2, genre: genre, retries: 1))
+        }
+        guard !similar.isEmpty else { return [] }
+
+        let discovery = (try? await api.getRandomSongs(size: target, retries: 1)) ?? []
+        return InfinityMixPoolBuilder.pool(
+            similar: similar,
+            discovery: discovery,
+            excluding: infinityExcludedSongIds(seed: seed)
+        )
+    }
+
+    /// Alles, was gerade läuft, schon in der Queue steht oder eben erst lief, bleibt draußen.
+    private func infinityExcludedSongIds(seed: Song) -> Set<String> {
+        var excluded = Set(infinityRecentSongIds)
+        excluded.insert(seed.id)
+        if let currentId = currentSong?.id { excluded.insert(currentId) }
+        excluded.formUnion(upcomingSongs().map(\.id))
+        return excluded
     }
 
     func addToQueue(_ songs: [Song]) {

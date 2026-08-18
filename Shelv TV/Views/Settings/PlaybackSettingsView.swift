@@ -11,6 +11,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingWifiBitrate") private var streamBitrate = 256
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
+    @AppStorage("infinityMixSeededEnabled") private var infinityMixSeededEnabled = true
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = true
     @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
@@ -152,6 +153,12 @@ struct PlaybackSettingsView: View {
                 ) { _ in
                     AudioPlayerService.shared.refreshInfinityMixWindow()
                 }
+                // Kein Fußnotentext: reiner Text ist auf tvOS nicht fokussierbar und stört die
+                // Navigation in der Liste.
+                Toggle(String(localized: "infinity_mix_seeded"), isOn: $infinityMixSeededEnabled)
+                    .onChange(of: infinityMixSeededEnabled) { _, _ in
+                        AudioPlayerService.shared.refreshInfinityMixWindow()
+                    }
             }
         }
         .toolbar(.hidden, for: .tabBar)

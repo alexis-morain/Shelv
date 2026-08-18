@@ -9,6 +9,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("recapThreshold") private var recapThreshold = 30
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
+    @AppStorage("infinityMixSeededEnabled") private var infinityMixSeededEnabled = true
     @AppStorage(AudioPlayerStateKey.savePlayerState) private var savePlayerState = true
     @State private var showAboutQueueSync = false
 
@@ -128,7 +129,7 @@ struct PlaybackSettingsView: View {
                 }
             }
 
-            Section(String(localized: "infinity_mix")) {
+            Section {
                 Picker(selection: $infinityMixAheadCount) {
                     ForEach(infinityMixAheadOptions, id: \.self) { count in
                         Text("\(count)").tag(count)
@@ -141,6 +142,19 @@ struct PlaybackSettingsView: View {
                 .onChange(of: infinityMixAheadCount) { _, _ in
                     AudioPlayerService.shared.refreshInfinityMixWindow()
                 }
+                Toggle(isOn: $infinityMixSeededEnabled) {
+                    Label { Text(String(localized: "infinity_mix_seeded")) } icon: {
+                        Image(systemName: "wand.and.stars").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+                .onChange(of: infinityMixSeededEnabled) { _, _ in
+                    AudioPlayerService.shared.refreshInfinityMixWindow()
+                }
+            } header: {
+                Text(String(localized: "infinity_mix"))
+            } footer: {
+                Text(String(localized: "infinity_mix_seeded_footer"))
             }
 
             Section(String(localized: "player_state")) {

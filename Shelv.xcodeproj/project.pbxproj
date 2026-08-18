@@ -29,6 +29,7 @@
 		BC1001212FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001202FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift */; };
 		BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */; };
 		BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */; };
+		BC1001602FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001612FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift */; };
 		BC1001262FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */; };
 		BC1001282FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */; };
 		BC10012A2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */; };
@@ -113,6 +114,7 @@
 		BC1001202FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/PersonalizationSettings.swift; sourceTree = "<group>"; };
 		BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RadioStation.swift; sourceTree = "<group>"; };
 		BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/InstantMixQueueBuilder.swift; sourceTree = "<group>"; };
+		BC1001612FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/InfinityMixPoolBuilder.swift; sourceTree = "<group>"; };
 		BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/SubsonicServer.swift; sourceTree = "<group>"; };
 		BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift; sourceTree = "<group>"; };
 		BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConnectivityDebugLog.swift; sourceTree = "<group>"; };
@@ -290,6 +292,7 @@
 				BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */,
 				BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */,
 				BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */,
+				BC1001612FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift */,
 				BC10011B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift */,
 				BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */,
 				BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */,
@@ -638,6 +641,7 @@
 				BC1001382FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift in Sources */,
 				BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */,
 				BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */,
+				BC1001602FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift in Sources */,
 				BC10010B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift in Sources */,
 				BC10013A2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift in Sources */,
 				BC10012E2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift in Sources */,

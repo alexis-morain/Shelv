@@ -449,6 +449,8 @@
 "infinity_mode" = "Infinity Mode";
 "infinity_mix" = "Infinity Mix";
 "infinity_mix_ahead_count" = "Songs to add";
+"infinity_mix_seeded" = "Match current song";
+"infinity_mix_seeded_footer" = "Infinity Mode continues with songs similar to what is playing, plus a few random picks so the mix keeps moving. Turn this off to add purely random songs from your whole library.";
 "instant_mix" = "Instant Mix";
 "no_instant_mix_available" = "No Instant Mix Available";
 "show_instant_mix" = "Show Instant Mix";

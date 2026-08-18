@@ -449,6 +449,8 @@
 "infinity_mode" = "无限模式";
 "infinity_mix" = "无限混合";
 "infinity_mix_ahead_count" = "添加歌曲数";
+"infinity_mix_seeded" = "匹配当前歌曲";
+"infinity_mix_seeded_footer" = "无限模式会续接与当前播放曲目相似的歌曲，并混入少量随机曲目，让混合保持新鲜。关闭后将从整个音乐库中随机添加歌曲。";
 "instant_mix" = "即时混音";
 "no_instant_mix_available" = "没有可用的即时混音";
 "show_instant_mix" = "显示即时混音";
