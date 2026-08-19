@@ -1,52 +1,25 @@
 import SwiftUI
 
-struct PersonalizedSongSwipeActionsModifier: ViewModifier {
+/// The song actions menu, shared between long-press (a `List` row's
+/// `.contextMenu`) and an explicit "..." button (used where long-press and
+/// swipe would otherwise fight a scroll view's own gesture recognizer, e.g.
+/// the Top Songs shelf's horizontal grid).
+struct SongActionsMenuContent: View {
     let song: Song
     let isOffline: Bool
     let isFavorite: Bool
-    let accentColor: Color
-    let isEnabled: Bool
     let onPlay: () -> Void
     let onFavorite: () -> Void
     let onAddToPlaylist: () -> Void
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
+    @Binding var songInfoSong: Song?
+    @Binding var shareURL: IdentifiableURL?
+    @Binding var shareErrorToast: ShelveToast?
 
-    @State private var songInfoSong: Song?
-    @State private var shareURL: IdentifiableURL?
-    @State private var shareErrorToast: ShelveToast?
     @Environment(\.personalizationSwipeConfiguration) private var personalization
 
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if isEnabled {
-            content
-                .contextMenu {
-                    songContextMenuItems
-                }
-                .sheet(item: $songInfoSong) { song in
-                    SongInfoSheetView(song: song, initialTab: .details)
-                }
-                .sheet(item: $shareURL) { wrapped in
-                    ActivityShareSheet(items: [wrapped.url])
-                }
-                .shelveToast($shareErrorToast)
-                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    swipeButton(for: .leftPrimary)
-                    swipeButton(for: .leftSecondary)
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    swipeButton(for: .rightPrimary)
-                    swipeButton(for: .rightSecondary)
-                    swipeButton(for: .rightTertiary)
-                }
-        } else {
-            content
-        }
-    }
-
-    @ViewBuilder
-    private var songContextMenuItems: some View {
+    var body: some View {
         Button {
             onPlay()
         } label: {
@@ -129,6 +102,114 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                     shareErrorToast = ShelveToast(message: error.localizedDescription, isError: true)
                 }
             }
+        }
+    }
+}
+
+/// An explicit "..." button carrying the same song actions as
+/// `personalizedSongSwipeActions`, for contexts — like a horizontal
+/// shelf/grid — where long-press and swipe conflict with the container's own
+/// scroll gestures instead of being reliably recognized.
+struct SongMenuButton: View {
+    let song: Song
+    let isOffline: Bool
+    let isFavorite: Bool
+    let onPlay: () -> Void
+    let onFavorite: () -> Void
+    let onAddToPlaylist: () -> Void
+    let onPlayNext: () -> Void
+    let onAddToQueue: () -> Void
+
+    @State private var songInfoSong: Song?
+    @State private var shareURL: IdentifiableURL?
+    @State private var shareErrorToast: ShelveToast?
+
+    var body: some View {
+        Menu {
+            SongActionsMenuContent(
+                song: song,
+                isOffline: isOffline,
+                isFavorite: isFavorite,
+                onPlay: onPlay,
+                onFavorite: onFavorite,
+                onAddToPlaylist: onAddToPlaylist,
+                onPlayNext: onPlayNext,
+                onAddToQueue: onAddToQueue,
+                songInfoSong: $songInfoSong,
+                shareURL: $shareURL,
+                shareErrorToast: $shareErrorToast
+            )
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .sheet(item: $songInfoSong) { song in
+            SongInfoSheetView(song: song, initialTab: .details)
+        }
+        .sheet(item: $shareURL) { wrapped in
+            ActivityShareSheet(items: [wrapped.url])
+        }
+        .shelveToast($shareErrorToast)
+    }
+}
+
+struct PersonalizedSongSwipeActionsModifier: ViewModifier {
+    let song: Song
+    let isOffline: Bool
+    let isFavorite: Bool
+    let accentColor: Color
+    let isEnabled: Bool
+    let onPlay: () -> Void
+    let onFavorite: () -> Void
+    let onAddToPlaylist: () -> Void
+    let onPlayNext: () -> Void
+    let onAddToQueue: () -> Void
+
+    @State private var songInfoSong: Song?
+    @State private var shareURL: IdentifiableURL?
+    @State private var shareErrorToast: ShelveToast?
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .contextMenu {
+                    SongActionsMenuContent(
+                        song: song,
+                        isOffline: isOffline,
+                        isFavorite: isFavorite,
+                        onPlay: onPlay,
+                        onFavorite: onFavorite,
+                        onAddToPlaylist: onAddToPlaylist,
+                        onPlayNext: onPlayNext,
+                        onAddToQueue: onAddToQueue,
+                        songInfoSong: $songInfoSong,
+                        shareURL: $shareURL,
+                        shareErrorToast: $shareErrorToast
+                    )
+                }
+                .sheet(item: $songInfoSong) { song in
+                    SongInfoSheetView(song: song, initialTab: .details)
+                }
+                .sheet(item: $shareURL) { wrapped in
+                    ActivityShareSheet(items: [wrapped.url])
+                }
+                .shelveToast($shareErrorToast)
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    swipeButton(for: .leftPrimary)
+                    swipeButton(for: .leftSecondary)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    swipeButton(for: .rightPrimary)
+                    swipeButton(for: .rightSecondary)
+                    swipeButton(for: .rightTertiary)
+                }
+        } else {
+            content
         }
     }
 

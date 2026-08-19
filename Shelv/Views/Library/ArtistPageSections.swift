@@ -60,88 +60,43 @@ struct ArtistSimilarArtistsRow: View {
     }
 }
 
-/// Full-width artist photo behind the name and the playback actions.
-///
-/// Servers hand out square artist images (Navidrome caps them at 1000 px), so
-/// the square is cropped to a band around its centre, where portraits keep the
-/// face. Pages whose artist has no image keep the compact header instead.
-struct ArtistBannerHeader<Actions: View>: View {
-    let artist: Artist
-    let subtitle: String?
-    /// Public figures from outside the server, when the user asked for them.
-    let footnote: String?
-    let accentColor: Color
-    @ViewBuilder let actions: Actions
-
-    private let height: CGFloat = 260
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            GeometryReader { geo in
-                AlbumArtView(coverArtId: artist.coverArt, size: 1000, cornerRadius: 0)
-                    .frame(width: geo.size.width, height: geo.size.width)
-                    .offset(y: -(geo.size.width - height) / 2)
-            }
-            .frame(height: height)
-            .clipped()
-            .overlay(alignment: .bottomLeading) {
-                LinearGradient(
-                    colors: [.clear, Color(UIColor.systemBackground)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-                .allowsHitTesting(false)
-            }
-            .overlay(alignment: .bottomLeading) {
-                HStack(alignment: .bottom, spacing: 14) {
-                    // The wide photo is often a group or a stage shot; the round
-                    // portrait is what identifies the artist at a glance.
-                    AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
-                        .frame(width: 84, height: 84)
-                        .overlay(Circle().stroke(.background.opacity(0.6), lineWidth: 2))
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(artist.name)
-                            .font(.title).bold()
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.7)
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let footnote {
-                            Text(footnote)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 12)
-            }
-
-            actions
-                .padding(.horizontal)
-        }
-    }
-}
-
 /// A horizontal shelf of releases, the way the rest of Discover presents
 /// albums. Splitting albums from singles reads better than one long grid with
-/// a filter on top of it.
+/// a filter on top of it. The title opens the full, sortable list — a shelf
+/// alone doesn't scale to an artist with a large discography.
 struct ArtistReleaseShelf: View {
     let title: String
     let albums: [Album]
     let personalization: PersonalizationSwipeConfiguration
+    @Binding var sortRaw: String
+    @Binding var directionRaw: String
+    let isOffline: Bool
+    let accentColor: Color
 
     private let itemWidth: CGFloat = 150
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.title3).bold()
+            NavigationLink(destination: ArtistAllAlbumsView(
+                title: title,
+                albums: albums,
+                sortRaw: $sortRaw,
+                directionRaw: $directionRaw,
+                isOffline: isOffline,
+                accentColor: accentColor
+            )) {
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(.title3).bold()
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.secondary)
+                }
                 .padding(.horizontal)
+            }
+            .buttonStyle(.plain)
+            .navigationLinkIndicatorVisibility(.hidden)
 
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 16) {
@@ -163,6 +118,105 @@ struct ArtistReleaseShelf: View {
                 .padding(.horizontal)
             }
             .scrollIndicators(.hidden)
+        }
+    }
+}
+
+/// The full, sortable list behind a release shelf's title. Plain navigation
+/// and sorting only — no swipe actions or context menu, the album's own
+/// detail page and the shelf card already cover those. The list/grid choice
+/// that used to live on the artist page itself lives here now instead: this
+/// is the one place left where showing every release as a compact row versus
+/// a full-size cover actually matters.
+struct ArtistAllAlbumsView: View {
+    let title: String
+    let albums: [Album]
+    @Binding var sortRaw: String
+    @Binding var directionRaw: String
+    let isOffline: Bool
+    let accentColor: Color
+
+    @AppStorage("artistDetailAlbumIsGrid") private var isGrid = true
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
+
+    private var sortedAlbums: [Album] {
+        ArtistAlbumPlaybackOrder.sorted(
+            albums,
+            preference: ArtistAlbumSortPreference(sortRaw: sortRaw, directionRaw: directionRaw)
+        )
+    }
+
+    var body: some View {
+        Group {
+            if isGrid {
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 20) {
+                        ForEach(sortedAlbums) { album in
+                            NavigationLink(destination: AlbumDetailView(album: album)) {
+                                AlbumCardView(
+                                    album: album,
+                                    personalization: personalization,
+                                    showArtist: false,
+                                    showYear: true
+                                )
+                                .equatable()
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding()
+                }
+            } else {
+                List {
+                    ForEach(Array(sortedAlbums.enumerated()), id: \.element.id) { index, album in
+                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                            HStack(spacing: 12) {
+                                AlbumArtView(coverArtId: album.coverArt, size: 120, cornerRadius: 8)
+                                    .frame(width: 56, height: 56)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(album.name)
+                                        .font(.body)
+                                        .lineLimit(1)
+                                        .foregroundStyle(.primary)
+                                    if let year = album.year {
+                                        Text(String(year))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isGrid.toggle()
+                } label: {
+                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                LibrarySortMenu(
+                    segment: .albums,
+                    albumSortRaw: $sortRaw,
+                    albumDirectionRaw: $directionRaw,
+                    artistSortRaw: .constant(""),
+                    artistDirectionRaw: .constant(""),
+                    isOffline: isOffline,
+                    accentColor: accentColor,
+                    onAlbumSortChanged: { _ in }
+                )
+            }
         }
     }
 }
@@ -200,6 +254,7 @@ struct ArtistLatestReleaseCard: View {
             .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .navigationLinkIndicatorVisibility(.hidden)
         .padding(.horizontal)
     }
 }
