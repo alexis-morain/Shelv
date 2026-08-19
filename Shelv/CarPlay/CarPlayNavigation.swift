@@ -477,18 +477,25 @@ enum CarPlayNavigation {
     /// long-press menu, and the songs are already loaded by the time this
     /// row is tappable, so there's no loading placeholder to push first.
     static func openArtistTopSongs(_ songs: [Song], from ic: CPInterfaceController) {
-        let items = songs.enumerated().map { idx, song in
-            songListItem(song, index: idx, showCover: true) { _, c in
+        var coverMap: [String: [CPListItem]] = [:]
+        let items = songs.enumerated().map { idx, song -> CPListItem in
+            let item = songListItem(song, index: idx, showCover: true) { _, c in
                 c()
                 AudioPlayerService.shared.play(songs: songs, startIndex: idx)
                 presentNowPlaying(on: ic)
             }
+            if let id = song.coverArt { coverMap[id, default: []].append(item) }
+            return item
         }
         let template = CPListTemplate(
             title: String(localized: "top_songs"),
             sections: [CPListSection(items: items, header: nil, sectionIndexTitle: nil)]
         )
+        prefillCoversFromCache(coverMap)
         safePush(template, on: ic)
+        Task { @MainActor in
+            await streamCovers(into: coverMap)
+        }
     }
 
     // MARK: - Playlist
