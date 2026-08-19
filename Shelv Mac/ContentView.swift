@@ -131,6 +131,10 @@ struct MainWindowView: View {
                                     FavoritesView(scope: scope)
                                         .environmentObject(libraryStore)
                                 }
+                                .navigationDestination(for: ArtistAlbumGroup.self) { group in
+                                    ArtistAllAlbumsView(title: group.title, albums: group.albums)
+                                        .environmentObject(libraryStore)
+                                }
                         }
                         .frame(minWidth: MacMainWindowLayout.contentMinimumWidth)
                         .navigationSplitViewColumnWidth(

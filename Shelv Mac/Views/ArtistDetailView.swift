@@ -30,11 +30,10 @@ struct ArtistDetailView: View {
     @State private var shareURL: URL?
     @State private var shareErrorMessage: String?
     @State private var artistSongs: [Song]?
-    @State private var topSongsExpanded = false
     @State private var releaseGroup: ArtistReleaseGroup = .all
-    @State private var externalStats: ArtistExternalStats = .none
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
+    @State private var topSongsFirstVisible = 0
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
@@ -90,10 +89,6 @@ struct ArtistDetailView: View {
         }
     }
 
-    private var showsBanner: Bool {
-        !(vm.artist?.coverArt ?? "").isEmpty
-    }
-
     /// Releases and plays, from data the page already has. A discography holds
     /// albums, singles and EPs, so it counts releases.
     private var artistSubtitle: String? {
@@ -110,20 +105,6 @@ struct ArtistDetailView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    private var artistFootnote: String? {
-        var parts: [String] = []
-        if let listeners = externalStats.listeners {
-            parts.append(String(
-                format: String(localized: "artist_lastfm_listeners_format"),
-                listeners.formatted(.number)
-            ))
-        }
-        if let rank = externalStats.worldRank {
-            parts.append(String(format: String(localized: "artist_world_rank_format"), rank))
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
     private var lastFmURL: URL? {
         vm.lastFmURLString.flatMap(URL.init(string:))
     }
@@ -131,12 +112,6 @@ struct ArtistDetailView: View {
     private var musicBrainzURL: URL? {
         guard let id = vm.musicBrainzId, !id.isEmpty else { return nil }
         return URL(string: "https://musicbrainz.org/artist/\(id)")
-    }
-
-    private var visibleTopSongs: [Song] {
-        topSongsExpanded
-            ? vm.topSongs
-            : Array(vm.topSongs.prefix(ArtistTopSongsRanking.collapsedLimit))
     }
 
     private var filteredSongs: [Song] {
@@ -167,20 +142,6 @@ struct ArtistDetailView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        if showsBanner {
-                            ArtistBannerHeader(
-                                coverArtID: vm.artist?.coverArt,
-                                name: vm.artist?.name ?? artistName,
-                                subtitle: artistSubtitle,
-                                footnote: artistFootnote
-                            ) {
-                                ViewThatFits(in: .horizontal) {
-                                    actionButtons(iconOnly: false, compact: false)
-                                    actionButtons(iconOnly: true, compact: false)
-                                    actionButtons(iconOnly: true, compact: true)
-                                }
-                            }
-                        } else {
                         HStack(alignment: .top, spacing: 24) {
                             CoverArtView(url: coverURL, size: 120, isCircle: true)
                                 .shadow(color: .black.opacity(0.2), radius: 10)
@@ -188,11 +149,10 @@ struct ArtistDetailView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(vm.artist?.name ?? artistName)
                                     .font(.title.bold())
-                                if let count = vm.artist?.albumCount {
-                                    Text(String(format: String(localized: "count_albums_format"), count))
+                                if let subtitle = artistSubtitle {
+                                    Text(subtitle)
                                         .foregroundStyle(.secondary)
                                 }
-
                                 Spacer(minLength: 8)
 
                                 ViewThatFits(in: .horizontal) {
@@ -206,9 +166,8 @@ struct ArtistDetailView: View {
                         }
                         .padding(.horizontal, 24)
                         .padding(.top, 20)
-                        }
 
-                        if searchQuery.isEmpty && !visibleTopSongs.isEmpty {
+                        if searchQuery.isEmpty && !vm.topSongs.isEmpty {
                             topSongsSection
                         }
 
@@ -384,7 +343,6 @@ struct ArtistDetailView: View {
         }
         .task(id: "\(artistId)|\(musicLibraries.revision)") {
             await vm.load(artistId: artistId, artistName: artistName)
-            await loadExternalStats()
         }
         .task(id: songSearchLoadID) {
             guard !searchQuery.isEmpty, !availableAlbums.isEmpty else {
@@ -454,56 +412,95 @@ struct ArtistDetailView: View {
         .padding(.bottom, 8)
     }
 
+    /// Two columns of four, side by side when the window is wide enough,
+    /// one scroll apart when it isn't — same shelf as the artist page's
+    /// album/singles rows, just for songs instead of covers.
+    private static let topSongsGridRows = Array(
+        repeating: GridItem(.fixed(60), spacing: 4),
+        count: 4
+    )
+    private static let topSongsStep = 4
+    private static let topSongsMinCellWidth: CGFloat = 280
+    private static let topSongsMaxCellWidth: CGFloat = 460
+
+    private var topSongsAtStart: Bool { topSongsFirstVisible == 0 }
+    private var topSongsAtEnd: Bool { topSongsFirstVisible + Self.topSongsStep >= vm.topSongs.count }
+    private var topSongsColumnCount: Int {
+        max(1, Int(ceil(Double(vm.topSongs.count) / Double(Self.topSongsStep))))
+    }
+
     private var topSongsSection: some View {
-        SearchSection(title: String(localized: "top_songs")) {
-            ForEach(Array(visibleTopSongs.enumerated()), id: \.element.id) { index, song in
-                HStack(spacing: 8) {
-                    Text("\(index + 1)")
-                        .font(.subheadline)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(width: 18, alignment: .trailing)
-                        .padding(.leading, 20)
-                    SearchSongRow(song: song) {
-                        appState.player.play(songs: visibleTopSongs, startIndex: index)
-                    } onPlayNext: {
-                        appState.player.addPlayNext(song)
-                    } onAddToQueue: {
-                        appState.player.addToQueue(song)
+        GeometryReader { geo in
+            let cellWidth = min(max(geo.size.width - 40, Self.topSongsMinCellWidth), Self.topSongsMaxCellWidth)
+            let neededWidth = CGFloat(topSongsColumnCount) * cellWidth
+                + CGFloat(max(0, topSongsColumnCount - 1)) * 24
+                + 40
+            let needsScrolling = neededWidth > geo.size.width
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .center) {
+                    Text(String(localized: "top_songs"))
+                        .font(.title2).bold()
+                    Spacer()
+                    // Only worth showing once there's actually something to
+                    // scroll to — a wide enough window shows every column.
+                    if needsScrolling {
+                        HStack(spacing: 6) {
+                            ShelfNavButton(icon: "chevron.left", disabled: topSongsAtStart) {
+                                topSongsFirstVisible = max(0, topSongsFirstVisible - Self.topSongsStep)
+                            }
+                            ShelfNavButton(icon: "chevron.right", disabled: topSongsAtEnd) {
+                                topSongsFirstVisible = min(
+                                    max(0, vm.topSongs.count - Self.topSongsStep),
+                                    topSongsFirstVisible + Self.topSongsStep
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHGrid(rows: Self.topSongsGridRows, spacing: 24) {
+                            ForEach(Array(vm.topSongs.enumerated()), id: \.element.id) { index, song in
+                                SearchSongRow(
+                                    song: song,
+                                    rank: index + 1,
+                                    isPlaying: appState.player.currentSong?.id == song.id,
+                                    showFavorite: showFavoriteActions,
+                                    showPlaylist: showPlaylistActions,
+                                    isStarred: libraryStore.isSongStarred(song),
+                                    showsHoverHighlight: false
+                                ) {
+                                    appState.player.play(songs: vm.topSongs, startIndex: index)
+                                } onPlayNext: {
+                                    appState.player.addPlayNext(song)
+                                } onAddToQueue: {
+                                    appState.player.addToQueue(song)
+                                } onFavorite: {
+                                    Task { await libraryStore.toggleStarSong(song) }
+                                } onAddToPlaylist: {
+                                    NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                }
+                                .frame(width: cellWidth)
+                                .id(song.id)
+                            }
+                        }
+                        .padding(.horizontal, 20)
+                    }
+                    .scrollDisabled(!needsScrolling)
+                    .onChange(of: topSongsFirstVisible) { _, newValue in
+                        guard vm.topSongs.indices.contains(newValue) else { return }
+                        withAnimation(.easeInOut(duration: 0.28)) {
+                            proxy.scrollTo(vm.topSongs[newValue].id, anchor: .leading)
+                        }
                     }
                 }
             }
-
-            if vm.topSongs.count > ArtistTopSongsRanking.collapsedLimit {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { topSongsExpanded.toggle() }
-                } label: {
-                    Text(topSongsExpanded
-                         ? String(localized: "show_less")
-                         : String(localized: "show_more"))
-                        .font(.subheadline).bold()
-                }
-                .buttonStyle(.link)
-                .padding(.horizontal, 20)
-                .padding(.top, 6)
-            }
         }
+        .frame(height: 300)
         .padding(.bottom, 8)
-    }
-
-    /// Optional and last: nothing on this page depends on it, and it is the
-    /// only request that leaves the user's own server.
-    private func loadExternalStats() async {
-        guard !offlineMode.isOffline, ArtistExternalStatsSettings.isEnabled else {
-            externalStats = .none
-            return
-        }
-        let stats = await ArtistExternalStatsService.shared.stats(
-            artistName: vm.artist?.name ?? artistName,
-            musicBrainzId: vm.musicBrainzId
-        )
-        guard !Task.isCancelled else { return }
-        externalStats = stats
     }
 
     private func shareArtist() {
@@ -775,7 +772,9 @@ class ArtistDetailViewModel: ObservableObject {
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
             let info = try? await artistInfo
             biography = info?.biography?.strippingHTML
-            similarArtists = info?.similarArtist ?? []
+            // Servers can list a track/featured artist with no album of their
+            // own here; tapping through would land on an empty artist page.
+            similarArtists = (info?.similarArtist ?? []).filter { ($0.albumCount ?? 0) > 0 }
             musicBrainzId = info?.musicBrainzId
             lastFmURLString = info?.lastFmUrl
         } catch {
@@ -796,7 +795,8 @@ class ArtistDetailViewModel: ObservableObject {
         }
         let songs = await ArtistTopSongsService.topSongs(
             artistName: artist?.name ?? "",
-            albums: albums
+            albums: albums,
+            limit: 8
         ) { albumID in
             (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
         }

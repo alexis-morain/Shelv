@@ -11,76 +11,17 @@ extension ArtistReleaseGroup {
     }
 }
 
-/// Full-width artist photo behind the name and the playback actions.
-///
-/// Servers hand out square artist images (Navidrome caps them at 1000 px), so
-/// the square is cropped to a band around its centre, where portraits keep the
-/// face. Artists without a photo keep the compact header instead.
-struct ArtistBannerHeader<Actions: View>: View {
-    let coverArtID: String?
-    let name: String
-    let subtitle: String?
-    let footnote: String?
-    @ViewBuilder let actions: Actions
-
-    private let height: CGFloat = 240
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            GeometryReader { geo in
-                CoverArtView(
-                    coverArtID: coverArtID,
-                    requestSize: 1000,
-                    size: geo.size.width,
-                    cornerRadius: 0
-                )
-                .frame(width: geo.size.width, height: geo.size.width)
-                .offset(y: -(geo.size.width - height) / 2)
-            }
-            .frame(height: height)
-            .clipped()
-            .overlay(alignment: .bottom) {
-                LinearGradient(
-                    colors: [.clear, Color(nsColor: .windowBackgroundColor)],
-                    startPoint: .center,
-                    endPoint: .bottom
-                )
-                .allowsHitTesting(false)
-            }
-            .overlay(alignment: .bottomLeading) {
-                HStack(alignment: .bottom, spacing: 16) {
-                    // The wide photo is often a group or a stage shot; the round
-                    // portrait is what identifies the artist at a glance.
-                    CoverArtView(coverArtID: coverArtID, requestSize: 300, size: 96, isCircle: true)
-                        .overlay(Circle().stroke(.background.opacity(0.6), lineWidth: 2))
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(name)
-                            .font(.largeTitle.bold())
-                            .lineLimit(2)
-                        if let subtitle {
-                            Text(subtitle)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let footnote {
-                            Text(footnote)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 12)
-            }
-
-            actions
-                .padding(.horizontal, 24)
-        }
-    }
+/// Identifies the full, sortable album list behind a release shelf's title —
+/// the escape hatch from a shelf that doesn't scale to a large discography.
+struct ArtistAlbumGroup: Hashable {
+    let title: String
+    let albums: [Album]
 }
 
 /// A horizontal shelf of releases. Splitting albums from singles reads better
-/// than one long grid with a filter on top of it.
+/// than one long grid with a filter on top of it. The title opens the full,
+/// sortable list, with the same grid/list and sort options as the Library's
+/// own Albums screen.
 struct ArtistReleaseShelf: View {
     let title: String
     let albums: [Album]
@@ -89,9 +30,18 @@ struct ArtistReleaseShelf: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.title3.bold())
-                .padding(.horizontal, 24)
+            NavigationLink(value: ArtistAlbumGroup(title: title, albums: albums)) {
+                HStack(spacing: 4) {
+                    Text(title)
+                        .font(.title3.bold())
+                        .foregroundStyle(.primary)
+                    Image(systemName: "chevron.right")
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
 
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 16) {
@@ -106,9 +56,114 @@ struct ArtistReleaseShelf: View {
                     }
                 }
                 .padding(.horizontal, 24)
+                // Room for the hover scale-up: without it, a ScrollView clips
+                // the top of the enlarged cover to its own established
+                // height, same fix as the Discover shelf's `AlbumShelfSection`.
+                .padding(.top, 8)
             }
             .scrollIndicators(.hidden)
         }
+    }
+}
+
+/// The full, sortable list behind a release shelf's title — same grid/list
+/// toggle and sort menu as the Library's own Albums screen, just scoped to
+/// this artist's releases.
+struct ArtistAllAlbumsView: View {
+    let title: String
+    let albums: [Album]
+
+    @AppStorage("artistAllAlbumsIsGrid") private var isGrid = true
+    @AppStorage("artistDetailAlbumSort") private var sortRaw: String = LibrarySortOption.recentlyAdded.rawValue
+    @AppStorage("artistDetailAlbumDirection") private var directionRaw: String = SortDirection.descending.rawValue
+    @ObservedObject private var offlineMode = OfflineModeService.shared
+
+    private var sortOption: LibrarySortOption {
+        LibrarySortOption(rawValue: sortRaw) ?? .recentlyAdded
+    }
+    private var direction: SortDirection {
+        SortDirection(rawValue: directionRaw) ?? .descending
+    }
+
+    private var sortedAlbums: [Album] {
+        ArtistAlbumPlaybackOrder.sorted(
+            albums,
+            preference: ArtistAlbumSortPreference(sortRaw: sortRaw, directionRaw: directionRaw)
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Picker("\(String(localized: "sort")):", selection: $sortRaw) {
+                    ForEach(LibrarySortOption.allCases.filter {
+                        $0 != .artist && (!offlineMode.isOffline || !$0.requiresServer)
+                    }, id: \.rawValue) { opt in
+                        Text(opt.label).tag(opt.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.primary)
+                .frame(width: 180)
+                if sortOption.allowsDirection {
+                    Button {
+                        directionRaw = direction == .ascending
+                            ? SortDirection.descending.rawValue
+                            : SortDirection.ascending.rawValue
+                    } label: {
+                        Image(systemName: direction == .ascending ? "arrow.up" : "arrow.down")
+                            .font(.title3)
+                    }
+                    .buttonStyle(.borderless)
+                    .help(direction == .ascending ? String(localized: "ascending") : String(localized: "descending"))
+                }
+                Button { isGrid.toggle() } label: {
+                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                        .font(.title3)
+                }
+                .buttonStyle(.borderless)
+                .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            if isGrid {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)], spacing: 20) {
+                        ForEach(sortedAlbums) { album in
+                            NavigationLink(value: album) {
+                                AlbumGridItem(album: album)
+                                    .equatable()
+                            }
+                            .buttonStyle(.plain)
+                            .albumContextMenu(album)
+                        }
+                    }
+                    .padding(20)
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(sortedAlbums) { album in
+                            NavigationLink(value: album) {
+                                AlbumListRow(album: album)
+                                    .equatable()
+                            }
+                            .buttonStyle(.plain)
+                            .albumContextMenu(album)
+                            if album.id != sortedAlbums.last?.id {
+                                Divider().padding(.leading, 76)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        }
+        .navigationTitle(title)
     }
 }
 

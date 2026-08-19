@@ -86,9 +86,19 @@ struct SearchAlbumRow: View {
 
 struct SearchSongRow: View {
     let song: Song
+    /// Shown ahead of the artwork for ranked lists (artist top songs); nil
+    /// keeps this a plain song row.
+    var rank: Int? = nil
+    /// Swaps the rank for the pulsing "now playing" waveform, the same as
+    /// the album track list — computed by the caller, same convention as
+    /// `TrackRow.isPlaying`.
+    var isPlaying: Bool = false
     var showFavorite: Bool = false
     var showPlaylist: Bool = false
     var isStarred: Bool = false
+    /// Off where the row already has its own visible play button (e.g. the
+    /// Top Songs shelf): the hover fill on top of that reads as clutter.
+    var showsHoverHighlight: Bool = true
     let onPlay: () -> Void
     var onPlayNext: (() -> Void)? = nil
     var onAddToQueue: (() -> Void)? = nil
@@ -101,16 +111,37 @@ struct SearchSongRow: View {
         UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
     }
     @State private var isHovered = false
+    @State private var waveformPulse = false
+    @State private var shareURL: URL?
+    @State private var shareErrorMessage: String?
 
     var body: some View {
         HStack(spacing: 12) {
+            if let rank {
+                Group {
+                    if isPlaying {
+                        Image(systemName: "waveform")
+                            .foregroundStyle(themeColor)
+                            .opacity(waveformPulse ? 1.0 : 0.3)
+                            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: waveformPulse)
+                            .onAppear { waveformPulse = true }
+                            .onDisappear { waveformPulse = false }
+                    } else {
+                        Text("\(rank)")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.subheadline)
+                .monospacedDigit()
+                .frame(width: 20, alignment: .leading)
+            }
             CoverArtView(
                 coverArtID: song.coverArt,
                 requestSize: 50,
                 size: 44,
                 cornerRadius: 6
             )
-                .padding(.leading, 20)
+                .padding(.leading, rank == nil ? 20 : 0)
             VStack(alignment: .leading) {
                 Text(song.title).font(.callout.bold())
                 if let artist = song.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
@@ -130,7 +161,7 @@ struct SearchSongRow: View {
             .padding(.trailing, 20)
         }
         .padding(.vertical, 4)
-        .background { if isHovered { Color.primary.opacity(0.07) } }
+        .background { if showsHoverHighlight && isHovered { Color.primary.opacity(0.07) } }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
         .onTapGesture(count: 2) { onPlay() }
@@ -171,6 +202,34 @@ struct SearchSongRow: View {
             Divider()
             Button(String(localized: "song_info_details")) {
                 AppState.shared.showSongInfo(song)
+            }
+            Button(String(localized: "share")) {
+                shareSong()
+            }
+        }
+        .sharingServicePicker(url: $shareURL)
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { shareErrorMessage != nil }, set: { if !$0 { shareErrorMessage = nil } }),
+            presenting: shareErrorMessage
+        ) { _ in
+            Button(String(localized: "ok")) {}
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private func shareSong() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run { shareErrorMessage = String(localized: "share_link_failed") }
+                    return
+                }
+                await MainActor.run { shareURL = url }
+            } catch {
+                await MainActor.run { shareErrorMessage = error.localizedDescription }
             }
         }
     }
