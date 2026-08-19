@@ -333,14 +333,14 @@ enum CarPlayNavigation {
         topSongs: [Song],
         ic: CPInterfaceController
     ) {
-        // Sections are always [actions, top songs, albums]; every reactive
-        // rebuild below must keep all three, not just the one it recomputes.
+        // Sections are always [actions, albums]; every reactive rebuild below
+        // must keep both, not just the one it recomputes.
         func rebuildActionsAsync() {
             Task { @MainActor [weak template] in
                 guard let t = template else { return }
                 let snap = t.sections
-                guard snap.count >= 3 else { return }
-                t.updateSections([makeActionsSection(), snap[1], snap[2]])
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
             }
         }
 
@@ -386,7 +386,14 @@ enum CarPlayNavigation {
                 }))
             }
 
-            return CPListSection(items: makeActionItems(actions), header: artist.name, sectionIndexTitle: nil)
+            var items = makeActionItems(actions)
+            if !topSongs.isEmpty {
+                let row = CPListItem(text: String(localized: "top_songs"), detailText: nil)
+                row.accessoryType = .disclosureIndicator
+                row.handler = { _, c in c(); openArtistTopSongs(topSongs, from: ic) }
+                items.append(row)
+            }
+            return CPListSection(items: items, header: artist.name, sectionIndexTitle: nil)
         }
 
         func makeAlbumsSection() -> (section: CPListSection, coverMap: [String: [CPListItem]]) {
@@ -403,10 +410,10 @@ enum CarPlayNavigation {
                     Task { @MainActor [weak template] in
                         guard let t = template else { return }
                         let snap = t.sections
-                        guard snap.count >= 3 else { return }
+                        guard snap.count >= 2 else { return }
                         let (freshSection, freshMap) = makeAlbumsSection()
                         prefillCoversFromCache(freshMap)
-                        t.updateSections([snap[0], snap[1], freshSection])
+                        t.updateSections([snap[0], freshSection])
                         await streamCovers(into: freshMap)
                     }
                 }
@@ -416,27 +423,8 @@ enum CarPlayNavigation {
             return (CPListSection(items: items, header: String(localized: "albums"), sectionIndexTitle: nil), coverMap)
         }
 
-        // Plain tap-to-play rows, no secondary actions: CarPlay has no room
-        // for a long-press menu, so this mirrors the album track list exactly.
-        func makeSongsSection() -> CPListSection {
-            let items = topSongs.enumerated().map { idx, song in
-                songListItem(song, index: idx) { [weak template] _, c in
-                    c()
-                    AudioPlayerService.shared.play(songs: topSongs, startIndex: idx)
-                    presentNowPlaying(on: ic)
-                    Task { @MainActor [weak template] in
-                        guard let t = template else { return }
-                        let snap = t.sections
-                        guard snap.count >= 3 else { return }
-                        t.updateSections([snap[0], makeSongsSection(), snap[2]])
-                    }
-                }
-            }
-            return CPListSection(items: items, header: String(localized: "top_songs"), sectionIndexTitle: nil)
-        }
-
         let (albumsSection, initialCoverMap) = makeAlbumsSection()
-        template.updateSections([makeActionsSection(), makeSongsSection(), albumsSection])
+        template.updateSections([makeActionsSection(), albumsSection])
 
         let tasks = [
             Task { @MainActor in
@@ -459,28 +447,48 @@ enum CarPlayNavigation {
                     lastTheme   = currentTheme
                     guard let t = template else { return }
                     let snap = t.sections
-                    guard snap.count >= 3 else { return }
-                    t.updateSections([makeActionsSection(), snap[1], snap[2]])
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
                 }
             },
             Task { @MainActor [weak template] in
                 for await _ in LibraryStore.shared.$starredArtists.dropFirst(1).values {
                     guard let t = template else { return }
                     let snap = t.sections
-                    guard snap.count >= 3 else { return }
-                    t.updateSections([makeActionsSection(), snap[1], snap[2]])
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
                 }
             },
             Task { @MainActor [weak template] in
                 for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
                     guard let t = template else { return }
                     let snap = t.sections
-                    guard snap.count >= 3 else { return }
-                    t.updateSections([makeActionsSection(), snap[1], snap[2]])
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
                 }
             }
         ]
         CarPlayTemplateTaskRegistry.setTasks(tasks, for: template, in: ic)
+    }
+
+    /// Pushed from the artist screen's "Top Songs" row, the same way "View
+    /// Artist" pushes an artist screen from an album. Plain tap-to-play
+    /// rows with covers, no secondary actions: CarPlay has no room for a
+    /// long-press menu, and the songs are already loaded by the time this
+    /// row is tappable, so there's no loading placeholder to push first.
+    static func openArtistTopSongs(_ songs: [Song], from ic: CPInterfaceController) {
+        let items = songs.enumerated().map { idx, song in
+            songListItem(song, index: idx, showCover: true) { _, c in
+                c()
+                AudioPlayerService.shared.play(songs: songs, startIndex: idx)
+                presentNowPlaying(on: ic)
+            }
+        }
+        let template = CPListTemplate(
+            title: String(localized: "top_songs"),
+            sections: [CPListSection(items: items, header: nil, sectionIndexTitle: nil)]
+        )
+        safePush(template, on: ic)
     }
 
     // MARK: - Playlist
