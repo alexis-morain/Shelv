@@ -303,7 +303,18 @@ enum CarPlayNavigation {
                 }
                 albums = fetched.isEmpty ? downloadedAlbums(for: artist) : fetched
             }
-            configureArtistDetail(template, artist: artist, albums: albums, ic: ic)
+            let topSongs: [Song]
+            if OfflineModeService.shared.isOffline {
+                topSongs = []
+            } else {
+                topSongs = await ArtistTopSongsService.topSongs(
+                    artistName: artist.name,
+                    albums: albums
+                ) { albumID in
+                    (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+                }
+            }
+            configureArtistDetail(template, artist: artist, albums: albums, topSongs: topSongs, ic: ic)
         }
     }
 
@@ -314,13 +325,21 @@ enum CarPlayNavigation {
         return match?.albums.map { $0.asAlbum() } ?? []
     }
 
-    static func configureArtistDetail(_ template: CPListTemplate, artist: Artist, albums: [Album], ic: CPInterfaceController) {
+    static func configureArtistDetail(
+        _ template: CPListTemplate,
+        artist: Artist,
+        albums: [Album],
+        topSongs: [Song],
+        ic: CPInterfaceController
+    ) {
+        // Sections are always [actions, top songs, albums] — every reactive
+        // rebuild below must keep all three, not just the one it recomputes.
         func rebuildActionsAsync() {
             Task { @MainActor [weak template] in
                 guard let t = template else { return }
                 let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
+                guard snap.count >= 3 else { return }
+                t.updateSections([makeActionsSection(), snap[1], snap[2]])
             }
         }
 
@@ -383,10 +402,10 @@ enum CarPlayNavigation {
                     Task { @MainActor [weak template] in
                         guard let t = template else { return }
                         let snap = t.sections
-                        guard snap.count >= 2 else { return }
+                        guard snap.count >= 3 else { return }
                         let (freshSection, freshMap) = makeAlbumsSection()
                         prefillCoversFromCache(freshMap)
-                        t.updateSections([snap[0], freshSection])
+                        t.updateSections([snap[0], snap[1], freshSection])
                         await streamCovers(into: freshMap)
                     }
                 }
@@ -396,8 +415,27 @@ enum CarPlayNavigation {
             return (CPListSection(items: items, header: String(localized: "albums"), sectionIndexTitle: nil), coverMap)
         }
 
+        // Plain tap-to-play rows, no secondary actions — CarPlay has no room
+        // for a long-press menu, so this mirrors the album track list exactly.
+        func makeSongsSection() -> CPListSection {
+            let items = topSongs.enumerated().map { idx, song in
+                songListItem(song, index: idx) { [weak template] _, c in
+                    c()
+                    AudioPlayerService.shared.play(songs: topSongs, startIndex: idx)
+                    presentNowPlaying(on: ic)
+                    Task { @MainActor [weak template] in
+                        guard let t = template else { return }
+                        let snap = t.sections
+                        guard snap.count >= 3 else { return }
+                        t.updateSections([snap[0], makeSongsSection(), snap[2]])
+                    }
+                }
+            }
+            return CPListSection(items: items, header: String(localized: "top_songs"), sectionIndexTitle: nil)
+        }
+
         let (albumsSection, initialCoverMap) = makeAlbumsSection()
-        template.updateSections([makeActionsSection(), albumsSection])
+        template.updateSections([makeActionsSection(), makeSongsSection(), albumsSection])
 
         let tasks = [
             Task { @MainActor in
@@ -420,24 +458,24 @@ enum CarPlayNavigation {
                     lastTheme   = currentTheme
                     guard let t = template else { return }
                     let snap = t.sections
-                    guard snap.count >= 2 else { return }
-                    t.updateSections([makeActionsSection(), snap[1]])
+                    guard snap.count >= 3 else { return }
+                    t.updateSections([makeActionsSection(), snap[1], snap[2]])
                 }
             },
             Task { @MainActor [weak template] in
                 for await _ in LibraryStore.shared.$starredArtists.dropFirst(1).values {
                     guard let t = template else { return }
                     let snap = t.sections
-                    guard snap.count >= 2 else { return }
-                    t.updateSections([makeActionsSection(), snap[1]])
+                    guard snap.count >= 3 else { return }
+                    t.updateSections([makeActionsSection(), snap[1], snap[2]])
                 }
             },
             Task { @MainActor [weak template] in
                 for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
                     guard let t = template else { return }
                     let snap = t.sections
-                    guard snap.count >= 2 else { return }
-                    t.updateSections([makeActionsSection(), snap[1]])
+                    guard snap.count >= 3 else { return }
+                    t.updateSections([makeActionsSection(), snap[1], snap[2]])
                 }
             }
         ]
