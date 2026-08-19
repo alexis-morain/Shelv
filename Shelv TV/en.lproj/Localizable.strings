@@ -19,6 +19,10 @@
 "mix_failed" = "Mix failed";
 "ok" = "OK";
 "songs" = "Songs";
+"top_songs" = "Top Songs";
+"artist_release_count_format" = "%d releases";
+"artist_play_count_format" = "%d plays";
+"fans_also_like" = "Similar Artists";
 "track_collection_count_one_format" = "%d track";
 "track_collection_count_other_format" = "%d tracks";
 "track_collection_duration_minutes_format" = "%d min";

@@ -19,6 +19,10 @@
 "mix_failed" = "Échec du mix";
 "ok" = "OK";
 "songs" = "Morceaux";
+"top_songs" = "Titres populaires";
+"artist_release_count_format" = "%d sorties";
+"artist_play_count_format" = "%d écoutes";
+"fans_also_like" = "Artistes similaires";
 "track_collection_count_one_format" = "%d morceau";
 "track_collection_count_other_format" = "%d morceaux";
 "track_collection_duration_minutes_format" = "%d min";
@@ -453,6 +457,7 @@
 "infinity_mode" = "Mode infini";
 "infinity_mix" = "Mix infini";
 "infinity_mix_ahead_count" = "Morceaux à ajouter";
+"infinity_mix_seeded" = "Correspondre au morceau en cours";
 "instant_mix" = "Mix instantané";
 "no_instant_mix_available" = "Aucun mix instantané disponible";
 "show_instant_mix" = "Afficher le mix instantané";
