@@ -71,6 +71,9 @@ struct AlbumCard: View {
     let album: Album
     var size: CGFloat = 240
     var showsFavoriteBadge = true
+    /// Off on an artist's own page: every album is by them already, repeating
+    /// the name under each cover says nothing.
+    var showsArtist = true
 
     @FocusState private var focused: Bool
 
@@ -95,7 +98,7 @@ struct AlbumCard: View {
             .albumContextMenu(album)
 
             Text(album.name).lineLimit(1).font(.callout)
-            if let artist = album.artist {
+            if showsArtist, let artist = album.artist {
                 Text(artist).lineLimit(1).font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -600,7 +603,7 @@ struct DetailSongRow: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .foregroundStyle(isTop3 ? AnyShapeStyle(AppTheme.color(for: themeColor)) : AnyShapeStyle(.secondary))
-                    .frame(width: 50, alignment: .trailing)
+                    .frame(width: 26, alignment: .leading)
             }
             if showArtwork {
                 CoverArtView(url: song.coverURL(200), size: 56, cornerRadius: 6)
@@ -648,6 +651,9 @@ struct DetailSongRow: View {
 /// Album-Zeile (Listenansicht) im einheitlichen borderless-Akzent-Fokus-Stil.
 struct AlbumListRow: View {
     let album: Album
+    /// Off on an artist's own page: every album is by them already, repeating
+    /// the name under each cover says nothing.
+    var showsArtist = true
     let onSelect: () -> Void
 
     var body: some View {
@@ -655,7 +661,7 @@ struct AlbumListRow: View {
             CoverArtView(url: album.coverURL(200), size: 80, cornerRadius: 6)
             VStack(alignment: .leading, spacing: 4) {
                 Text(album.name).lineLimit(1)
-                if let artist = album.artist {
+                if showsArtist, let artist = album.artist {
                     Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }

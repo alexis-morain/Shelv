@@ -15,12 +15,28 @@ struct ArtistDetailView: View {
 
     @State private var albums: [Album] = []
     @State private var songs: [Song] = []
+    @State private var topSongs: [Song] = []
+    @State private var similarArtists: [Artist] = []
     @State private var isLoading = true
     @State private var navAlbum: Album?
     @State private var showAddToPlaylist = false
 
     private var sort: AlbumSortOption { AlbumSortOption(rawValue: sortRaw) ?? .newest }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .descending }
+
+    /// Releases and plays, from data the page already has — same line as
+    /// iOS/macOS, in place of the album-count-only text this used to be.
+    private var artistSubtitle: String {
+        var parts: [String] = []
+        if !albums.isEmpty {
+            parts.append(String(format: String(localized: "artist_release_count_format"), albums.count))
+        }
+        let plays = albums.reduce(0) { $0 + ($1.playCount ?? 0) }
+        if plays > 0 {
+            parts.append(String(format: String(localized: "artist_play_count_format"), plays))
+        }
+        return parts.isEmpty ? "\(albums.count) \(String(localized: "albums"))" : parts.joined(separator: " · ")
+    }
 
     private var displayAlbums: [Album] {
         ArtistAlbumPlaybackOrder.sorted(
@@ -37,16 +53,27 @@ struct ArtistDetailView: View {
             VStack(alignment: .leading, spacing: 30) {
                 header
                 controls
-                Group {
-                    if isGrid {
-                        LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                            ForEach(displayAlbums) { AlbumCard(album: $0) }
-                        }
-                    } else {
-                        albumList
-                    }
+                if !topSongs.isEmpty {
+                    topSongsSection
                 }
-                .focusSection()
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(String(localized: "albums"))
+                        .font(.title3).bold()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Group {
+                        if isGrid {
+                            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                                ForEach(displayAlbums) { AlbumCard(album: $0, showsArtist: false) }
+                            }
+                        } else {
+                            albumList
+                        }
+                    }
+                    .focusSection()
+                }
+                if !similarArtists.isEmpty {
+                    similarArtistsSection
+                }
             }
             .padding(.horizontal, 50)
             .padding(.top, 30)
@@ -61,7 +88,83 @@ struct ArtistDetailView: View {
             }
             songs = await LibraryStore.shared.artistSongs(artist)
             isLoading = false
+
+            guard !offlineMode.isOffline else {
+                topSongs = []
+                similarArtists = []
+                return
+            }
+            topSongs = await ArtistTopSongsService.topSongs(
+                artistName: artist.name,
+                albums: albums,
+                limit: 8
+            ) { albumID in
+                (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+            }
+
+            let info = try? await SubsonicAPIService.shared.getArtistInfo(
+                id: artist.id,
+                similarArtistCount: ArtistPageLayout.similarArtistCount
+            )
+            // Servers can list a track/featured artist with no album of their
+            // own here; tapping through would land on an empty artist page.
+            similarArtists = (info?.similarArtist ?? []).filter { ($0.albumCount ?? 0) > 0 }
         }
+    }
+
+    private static let topSongsRowHeight: CGFloat = 76
+    private static let topSongsRowSpacing: CGFloat = 12
+    private static let topSongsColumnSpacing: CGFloat = 40
+    private static let topSongsGridRows = Array(
+        repeating: GridItem(.fixed(topSongsRowHeight), spacing: topSongsRowSpacing),
+        count: 4
+    )
+
+    /// Same ranking as iOS/macOS: two columns of four, spanning the screen's
+    /// full, fixed 16:9 width instead of a fixed card width — a TV screen
+    /// doesn't resize, so there's no case where this needs to scroll.
+    private var topSongsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "top_songs"))
+                .font(.title3).bold()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            GeometryReader { geo in
+                let columnWidth = (geo.size.width - Self.topSongsColumnSpacing) / 2
+                LazyHGrid(rows: Self.topSongsGridRows, spacing: Self.topSongsColumnSpacing) {
+                    ForEach(Array(topSongs.enumerated()), id: \.element.id) { index, song in
+                        DetailSongRow(song: song, number: index, showArtwork: true, rank: index + 1) {
+                            player.play(songs: topSongs, startIndex: index)
+                        }
+                        .frame(width: columnWidth)
+                    }
+                }
+            }
+            .frame(height: 4 * Self.topSongsRowHeight + 3 * Self.topSongsRowSpacing)
+        }
+        .focusSection()
+    }
+
+    /// Same server data as iOS/macOS, same per-artist long-press menu as
+    /// every other tvOS artist card (`ArtistCard` wires that up on its own).
+    private var similarArtistsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "fans_also_like"))
+                .font(.title3).bold()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 30) {
+                    ForEach(similarArtists) { artist in
+                        ArtistCard(artist: artist, size: 180)
+                    }
+                }
+                // ArtistCard scales up 12% and casts a 24pt shadow on focus —
+                // needs headroom on every side the ScrollView clips, not just
+                // top: the first/last card's own left/right edges too.
+                .padding(.horizontal, 40)
+                .padding(.top, 40)
+            }
+        }
+        .focusSection()
     }
 
     private var header: some View {
@@ -71,7 +174,7 @@ struct ArtistDetailView: View {
                 .font(.title2.weight(.semibold))
                 .lineLimit(2)
                 .minimumScaleFactor(0.82)
-            Text("\(albums.count) \(String(localized: "albums"))")
+            Text(artistSubtitle)
                 .font(.callout).foregroundStyle(.secondary)
             HStack(spacing: 20) {
                 Button { player.play(songs: songs, startIndex: 0) } label: {
@@ -134,7 +237,7 @@ struct ArtistDetailView: View {
     private var albumList: some View {
         LazyVStack(spacing: 4) {
             ForEach(displayAlbums) { album in
-                AlbumListRow(album: album) { navAlbum = album }
+                AlbumListRow(album: album, showsArtist: false) { navAlbum = album }
             }
         }
     }
