@@ -8,6 +8,8 @@ private enum SettingsRoute: Hashable {
 }
 
 struct SettingsView: View {
+    @AppStorage(ArtistExternalStatsSettings.enabledKey) private var showExternalArtistStats = false
+    @AppStorage(ArtistExternalStatsSettings.lastFMKeyKey) private var lastFMAPIKey = ""
     @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -63,6 +65,30 @@ struct SettingsView: View {
                         }
                     }
                     .id(themeColorName)
+                }
+
+                Section {
+                    Toggle(isOn: $showExternalArtistStats) {
+                        Label { Text(String(localized: "show_external_artist_stats")) } icon: {
+                            Image(systemName: "chart.bar").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+
+                    if showExternalArtistStats {
+                        LabeledContent {
+                            SecureField(String(localized: "lastfm_api_key"), text: $lastFMAPIKey)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .multilineTextAlignment(.trailing)
+                        } label: {
+                            Text(String(localized: "lastfm_api_key"))
+                        }
+                    }
+                } header: {
+                    Text(String(localized: "artist_stats"))
+                } footer: {
+                    Text(String(localized: "external_artist_stats_footer"))
                 }
 
                 Section(String(localized: "recap")) {

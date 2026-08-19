@@ -320,6 +320,13 @@ nonisolated struct ArtistDetail: Decodable, Identifiable, Sendable {
 
 nonisolated struct ArtistInfo: Decodable, Sendable {
     let biography: String?
+    /// Artists the server considers related. Navidrome only returns the ones
+    /// present in the library, so every entry is browsable.
+    let similarArtist: [Artist]?
+    /// Identifies the artist outside the server, for services that key on it.
+    let musicBrainzId: String?
+    /// The artist's Last.fm page, when the server resolved one.
+    let lastFmUrl: String?
 }
 
 nonisolated struct SearchResult: Decodable, Sendable {
@@ -1489,16 +1496,19 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return await filteredArtistDetailForActiveLibrary(artist)
     }
 
-    func getArtistInfo(id: String) async throws -> ArtistInfo {
+    /// - Parameter similarArtistCount: how many related artists the server should
+    ///   return. `getArtistInfo2` sends none at all when this is zero, which is
+    ///   what the biography-only callers want.
+    func getArtistInfo(id: String, similarArtistCount: Int = 0) async throws -> ArtistInfo {
         #if DEBUG
-        if isDemoActive { return ArtistInfo(biography: nil) }
+        if isDemoActive { return DemoContent.artistInfo(id: id, similarArtistCount: similarArtistCount) }
         #endif
         let body = try await fetchDecoded(Envelope<ArtistInfoBody>.self, path: "getArtistInfo2", extra: [
             URLQueryItem(name: "id", value: id),
-            URLQueryItem(name: "count", value: "0")
+            URLQueryItem(name: "count", value: "\(similarArtistCount)")
         ]).response
         try check(status: body.status, error: body.error)
-        return body.artistInfo2 ?? ArtistInfo(biography: nil)
+        return body.artistInfo2 ?? ArtistInfo(biography: nil, similarArtist: nil, musicBrainzId: nil, lastFmUrl: nil)
     }
 
     func getSong(id: String, retries: Int = 0) async throws -> Song {

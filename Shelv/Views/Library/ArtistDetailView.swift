@@ -30,6 +30,13 @@ struct ArtistDetailView: View {
     @State private var currentToast: ShelveToast?
     @State private var searchQuery = ""
     @State private var artistSongs: [Song]?
+    @State private var topSongs: [Song] = []
+    @State private var topSongsExpanded = false
+    @State private var similarArtists: [Artist] = []
+    @State private var externalStats: ArtistExternalStats = .none
+    @State private var musicBrainzId: String?
+    @State private var lastFmURLString: String?
+    @State private var releaseGroup: ArtistReleaseGroup = .all
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
     @State private var albumToDeleteDownloads: Album?
@@ -81,6 +88,93 @@ struct ArtistDetailView: View {
         "\(searchQuery.isEmpty ? "idle" : "searching")|\(songSearchSourceID)"
     }
 
+    private var visibleTopSongs: [Song] {
+        topSongsExpanded
+            ? topSongs
+            : Array(topSongs.prefix(ArtistTopSongsRanking.collapsedLimit))
+    }
+
+    private var showsTopSongs: Bool {
+        searchQuery.isEmpty && !visibleTopSongs.isEmpty
+    }
+
+    /// The list layout keeps a single list, so it keeps the filter. The grid
+    /// layout splits albums and short releases into their own shelves instead.
+    private var releaseGroups: [ArtistReleaseGroup] {
+        searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: sortedAlbums) : []
+    }
+
+    private var albumsOnly: [Album] {
+        ArtistDiscography.filter(sortedAlbums, to: .albums)
+    }
+
+    private var shortReleases: [Album] {
+        ArtistDiscography.filter(sortedAlbums, to: .singlesAndEPs)
+    }
+
+    /// Newest by release year, then by the date the server first saw it.
+    private var latestRelease: Album? {
+        sortedAlbums.max {
+            ($0.year ?? 0, $0.created ?? .distantPast) < ($1.year ?? 0, $1.created ?? .distantPast)
+        }
+    }
+
+    private var lastFmURL: URL? {
+        lastFmURLString.flatMap(URL.init(string:))
+    }
+
+    private var musicBrainzURL: URL? {
+        guard let musicBrainzId, !musicBrainzId.isEmpty else { return nil }
+        return URL(string: "https://musicbrainz.org/artist/\(musicBrainzId)")
+    }
+
+    /// The albums actually shown: the search filter first, then the
+    /// album / singles filter of the discography section.
+    private var displayedAlbums: [Album] {
+        guard searchQuery.isEmpty else { return filteredAlbums }
+        return ArtistDiscography.filter(filteredAlbums, to: releaseGroup)
+    }
+
+    /// Albums and play counts the server already reported, in place of the
+    /// monthly-listener line a commercial service would show here.
+    private var artistSubtitle: String? {
+        let albums = detail?.album ?? []
+        let albumCount = detail?.albumCount ?? artist.albumCount ?? albums.count
+        var parts: [String] = []
+        if albumCount > 0 {
+            parts.append(String(format: String(localized: "artist_release_count_format"), albumCount))
+        }
+        let plays = albums.reduce(0) { $0 + ($1.playCount ?? 0) }
+        if plays > 0 {
+            parts.append(String(format: String(localized: "artist_play_count_format"), plays))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// Second line of the banner: public numbers, only when the user turned
+    /// them on and a service answered.
+    private var artistFootnote: String? {
+        var parts: [String] = []
+        if let listeners = externalStats.listeners {
+            parts.append(String(
+                format: String(localized: "artist_lastfm_listeners_format"),
+                listeners.formatted(.number)
+            ))
+        }
+        if let rank = externalStats.worldRank {
+            parts.append(String(format: String(localized: "artist_world_rank_format"), rank))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private var showsBanner: Bool {
+        !(artist.coverArt ?? "").isEmpty
+    }
+
+    private var showsSimilarArtists: Bool {
+        searchQuery.isEmpty && !similarArtists.isEmpty
+    }
+
     private var sortedAlbums: [Album] {
         ArtistAlbumPlaybackOrder.sorted(
             detail?.album ?? [],
@@ -99,8 +193,9 @@ struct ArtistDetailView: View {
                 listBody
             }
         }
+
         .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
-        .navigationTitle(artist.name)
+        .navigationTitle(showsBanner ? "" : artist.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if showFavoriteActions && !offlineMode.isOffline {
@@ -182,7 +277,26 @@ struct ArtistDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var artistHeader: some View {
+        if showsBanner {
+            ArtistBannerHeader(
+                artist: artist,
+                subtitle: artistSubtitle,
+                footnote: artistFootnote,
+                accentColor: accentColor
+            ) {
+                HStack(spacing: 14) {
+                    playButton
+                    shuffleButton
+                }
+            }
+        } else {
+            compactArtistHeader
+        }
+    }
+
+    private var compactArtistHeader: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 16) {
                 AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
@@ -196,47 +310,8 @@ struct ArtistDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     HStack(spacing: 14) {
-                        Button {
-                            let albums = sortedAlbums
-                            guard !albums.isEmpty else { return }
-                            Task {
-                                let songs = await fetchAllSongs(from: albums)
-                                guard !songs.isEmpty else { return }
-                                player.play(songs: songs, startIndex: 0)
-                            }
-                        } label: {
-                            Label(String(localized: "play"), systemImage: "play.fill")
-                                .labelStyle(.titleAndIcon)
-                                .font(.body).bold()
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(accentColor)
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isLoading)
-
-                        Button {
-                            let albums = sortedAlbums
-                            guard !albums.isEmpty else { return }
-                            Task {
-                                let songs = await fetchAllSongs(from: albums)
-                                guard !songs.isEmpty else { return }
-                                player.playShuffled(songs: songs)
-                            }
-                        } label: {
-                            Label(String(localized: "shuffle"), systemImage: "shuffle")
-                                .labelStyle(.titleAndIcon)
-                                .font(.body).bold()
-                                .foregroundStyle(accentColor)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                                .background(accentColor.opacity(0.15))
-                                .clipShape(Capsule())
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isLoading)
+                        playButton
+                        shuffleButton
                     }
                 }
             }
@@ -246,10 +321,84 @@ struct ArtistDetailView: View {
         .padding(.top, 16)
     }
 
+    private var playButton: some View {
+        Button {
+            let albums = sortedAlbums
+            guard !albums.isEmpty else { return }
+            Task {
+                let songs = await fetchAllSongs(from: albums)
+                guard !songs.isEmpty else { return }
+                player.play(songs: songs, startIndex: 0)
+            }
+        } label: {
+            Label(String(localized: "play"), systemImage: "play.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.body).bold()
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(accentColor)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+
+    private var shuffleButton: some View {
+        Button {
+            let albums = sortedAlbums
+            guard !albums.isEmpty else { return }
+            Task {
+                let songs = await fetchAllSongs(from: albums)
+                guard !songs.isEmpty else { return }
+                player.playShuffled(songs: songs)
+            }
+        } label: {
+            Label(String(localized: "shuffle"), systemImage: "shuffle")
+                .labelStyle(.titleAndIcon)
+                .font(.body).bold()
+                .foregroundStyle(accentColor)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(accentColor.opacity(0.15))
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(isLoading)
+    }
+
+    private var topSongsGridSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "top_songs"))
+                .font(.title3).bold()
+
+            LazyVStack(spacing: 0) {
+                ForEach(Array(visibleTopSongs.enumerated()), id: \.element.id) { index, song in
+                    Button {
+                        player.play(songs: visibleTopSongs, startIndex: index)
+                    } label: {
+                        ArtistTopSongRow(rank: index + 1, song: song)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if topSongs.count > ArtistTopSongsRanking.collapsedLimit {
+                ArtistTopSongsToggle(isExpanded: $topSongsExpanded, accentColor: accentColor)
+                    .padding(.top, 4)
+            }
+        }
+        .padding(.horizontal)
+    }
+
     private var gridBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 artistHeader
+
+                if showsTopSongs {
+                    topSongsGridSection
+                }
 
                 if isLoading {
                     ProgressView()
@@ -263,7 +412,7 @@ struct ArtistDetailView: View {
                         .padding(.horizontal)
                         .padding(.top, 40)
                         .frame(maxWidth: .infinity)
-                } else if !filteredAlbums.isEmpty {
+                } else if !searchQuery.isEmpty {
                     Text(String(localized: "albums"))
                         .font(.title3).bold()
                         .padding(.horizontal)
@@ -283,6 +432,26 @@ struct ArtistDetailView: View {
                         }
                     }
                     .padding(.horizontal)
+                } else {
+                    if let latestRelease {
+                        ArtistLatestReleaseCard(album: latestRelease, accentColor: accentColor)
+                    }
+
+                    if !albumsOnly.isEmpty {
+                        ArtistReleaseShelf(
+                            title: String(localized: "albums"),
+                            albums: albumsOnly,
+                            personalization: personalization
+                        )
+                    }
+
+                    if !shortReleases.isEmpty {
+                        ArtistReleaseShelf(
+                            title: String(localized: "release_group_singles_eps"),
+                            albums: shortReleases,
+                            personalization: personalization
+                        )
+                    }
                 }
 
                 if !searchQuery.isEmpty {
@@ -309,9 +478,26 @@ struct ArtistDetailView: View {
                     }
                 }
 
+                if showsSimilarArtists {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(String(localized: "fans_also_like"))
+                            .font(.title3).bold()
+                            .padding(.horizontal)
+
+                        ArtistSimilarArtistsRow(artists: similarArtists)
+                    }
+                }
+
                 if let bio = biography, !bio.isEmpty {
-                    ArtistBiographyBox(biography: bio, accentColor: accentColor)
-                        .padding(.horizontal)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(String(localized: "more_info"))
+                            .font(.title3).bold()
+
+                        ArtistBiographyBox(biography: bio, accentColor: accentColor)
+
+                        ArtistLinksRow(lastFmURL: lastFmURL, musicBrainzURL: musicBrainzURL)
+                    }
+                    .padding(.horizontal)
                 }
 
                 PlayerBottomSpacer()
@@ -328,6 +514,35 @@ struct ArtistDetailView: View {
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                }
+            }
+
+            if showsTopSongs {
+                Section {
+                    ForEach(Array(visibleTopSongs.enumerated()), id: \.element.id) { index, song in
+                        Button {
+                            player.play(songs: visibleTopSongs, startIndex: index)
+                        } label: {
+                            ArtistTopSongRow(rank: index + 1, song: song)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                    }
+
+                    if topSongs.count > ArtistTopSongsRanking.collapsedLimit {
+                        ArtistTopSongsToggle(isExpanded: $topSongsExpanded, accentColor: accentColor)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowSeparator(.hidden)
+                    }
+                } header: {
+                    HStack {
+                        Text(String(localized: "top_songs"))
+                            .font(.title3).bold()
+                            .textCase(nil)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.leading, 0)
                 }
             }
 
@@ -352,7 +567,13 @@ struct ArtistDetailView: View {
                 }
             } else if !filteredAlbums.isEmpty {
                 Section {
-                    ForEach(filteredAlbums) { album in
+                    if !releaseGroups.isEmpty {
+                        ArtistReleaseGroupPicker(selection: $releaseGroup, groups: releaseGroups)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                            .listRowSeparator(.hidden)
+                    }
+
+                    ForEach(displayedAlbums) { album in
                         NavigationLink(destination: AlbumDetailView(album: album)) {
                             albumListRow(album)
                         }
@@ -382,7 +603,7 @@ struct ArtistDetailView: View {
                     }
                 } header: {
                     HStack {
-                        Text(String(localized: "albums"))
+                        Text(String(localized: searchQuery.isEmpty ? "discography" : "albums"))
                             .font(.title3).bold()
                             .textCase(nil)
                             .foregroundStyle(.primary)
@@ -414,12 +635,37 @@ struct ArtistDetailView: View {
                 }
             }
 
+            if showsSimilarArtists {
+                Section {
+                    ArtistSimilarArtistsRow(artists: similarArtists)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                } header: {
+                    HStack {
+                        Text(String(localized: "fans_also_like"))
+                            .font(.title3).bold()
+                            .textCase(nil)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                }
+            }
+
             if let bio = biography, !bio.isEmpty {
                 Section {
                     ArtistBiographyBox(biography: bio, accentColor: accentColor)
-                        .listRowInsets(EdgeInsets(top: 24, leading: 16, bottom: 0, trailing: 16))
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 0, trailing: 16))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                } header: {
+                    HStack {
+                        Text(String(localized: "more_info"))
+                            .font(.title3).bold()
+                            .textCase(nil)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
                 }
             }
 
@@ -639,20 +885,65 @@ struct ArtistDetailView: View {
         populateFromLocal()
         isLoading = detail == nil
         guard !offlineMode.isOffline else {
+            topSongs = []
+            similarArtists = []
+            externalStats = .none
             isLoading = false
             return
         }
         do {
             async let artistDetail = SubsonicAPIService.shared.getArtist(id: artist.id)
-            async let artistInfo = SubsonicAPIService.shared.getArtistInfo(id: artist.id)
+            async let artistInfo = SubsonicAPIService.shared.getArtistInfo(
+                id: artist.id,
+                similarArtistCount: ArtistPageLayout.similarArtistCount
+            )
             detail = try await artistDetail
-            biography = (try? await artistInfo)?.biography?.strippingHTML
+            let info = try? await artistInfo
+            biography = info?.biography?.strippingHTML
+            similarArtists = info?.similarArtist ?? []
+            musicBrainzId = info?.musicBrainzId
+            lastFmURLString = info?.lastFmUrl
         } catch {
             if detail == nil {
                 errorMessage = error.localizedDescription
             }
         }
         isLoading = false
+        await loadTopSongs()
+        await loadExternalStats()
+    }
+
+    /// Optional and last: nothing on this page depends on it, and it is the
+    /// only request that leaves the user's own server.
+    private func loadExternalStats() async {
+        guard !offlineMode.isOffline, ArtistExternalStatsSettings.isEnabled else {
+            externalStats = .none
+            return
+        }
+        let stats = await ArtistExternalStatsService.shared.stats(
+            artistName: artist.name,
+            musicBrainzId: musicBrainzId
+        )
+        guard !Task.isCancelled else { return }
+        externalStats = stats
+    }
+
+    /// Loaded after the albums are on screen: the ranking is a bonus section,
+    /// it must never delay the page itself.
+    private func loadTopSongs() async {
+        guard !offlineMode.isOffline else {
+            topSongs = []
+            return
+        }
+        let songs = await ArtistTopSongsService.topSongs(
+            artistName: artist.name,
+            albums: sortedAlbums
+        ) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+        }
+        guard !Task.isCancelled else { return }
+        topSongs = songs
+        topSongsExpanded = false
     }
 
     private func populateFromLocal() {

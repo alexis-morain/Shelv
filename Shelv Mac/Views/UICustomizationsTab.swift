@@ -150,6 +150,8 @@ private func localized(_ key: String) -> String {
 }
 
 private struct MacGeneralPersonalizationPanel: View {
+    @AppStorage(ArtistExternalStatsSettings.enabledKey) private var showExternalArtistStats = false
+    @AppStorage(ArtistExternalStatsSettings.lastFMKeyKey) private var lastFMAPIKey = ""
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
@@ -169,6 +171,24 @@ private struct MacGeneralPersonalizationPanel: View {
                     Label(String(localized: "interface_style"), systemImage: "play.rectangle")
                 }
                 .pickerStyle(.segmented)
+            }
+
+            Section {
+                Toggle(isOn: $showExternalArtistStats) {
+                    Label(String(localized: "show_external_artist_stats"), systemImage: "chart.bar")
+                }
+                .tint(themeColor)
+
+                if showExternalArtistStats {
+                    SecureField(String(localized: "lastfm_api_key"), text: $lastFMAPIKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+            } header: {
+                Text(String(localized: "artist_stats"))
+            } footer: {
+                Text(String(localized: "external_artist_stats_footer"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
