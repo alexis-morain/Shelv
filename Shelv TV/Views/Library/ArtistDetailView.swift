@@ -24,7 +24,7 @@ struct ArtistDetailView: View {
     private var sort: AlbumSortOption { AlbumSortOption(rawValue: sortRaw) ?? .newest }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .descending }
 
-    /// Releases and plays, from data the page already has — same line as
+    /// Releases and plays, from data the page already has, same line as
     /// iOS/macOS, in place of the album-count-only text this used to be.
     private var artistSubtitle: String {
         var parts: [String] = []
@@ -121,8 +121,8 @@ struct ArtistDetailView: View {
     )
 
     /// Same ranking as iOS/macOS: two columns of four, spanning the screen's
-    /// full, fixed 16:9 width instead of a fixed card width — a TV screen
-    /// doesn't resize, so there's no case where this needs to scroll.
+    /// full, fixed 16:9 width instead of a fixed card width, since a TV
+    /// screen doesn't resize, so there's no case where this needs to scroll.
     private var topSongsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(String(localized: "top_songs"))
@@ -132,7 +132,14 @@ struct ArtistDetailView: View {
                 let columnWidth = (geo.size.width - Self.topSongsColumnSpacing) / 2
                 LazyHGrid(rows: Self.topSongsGridRows, spacing: Self.topSongsColumnSpacing) {
                     ForEach(Array(topSongs.enumerated()), id: \.element.id) { index, song in
-                        DetailSongRow(song: song, number: index, showArtwork: true, rank: index + 1) {
+                        DetailSongRow(
+                            song: song,
+                            number: index,
+                            showArtwork: true,
+                            rank: index + 1,
+                            rankColumnWidth: 26,
+                            rankColumnAlignment: .leading
+                        ) {
                             player.play(songs: topSongs, startIndex: index)
                         }
                         .frame(width: columnWidth)
@@ -157,9 +164,9 @@ struct ArtistDetailView: View {
                         ArtistCard(artist: artist, size: 180)
                     }
                 }
-                // ArtistCard scales up 12% and casts a 24pt shadow on focus —
-                // needs headroom on every side the ScrollView clips, not just
-                // top: the first/last card's own left/right edges too.
+                // ArtistCard scales up 12% and casts a 24pt shadow on focus,
+                // so it needs headroom on every side the ScrollView clips,
+                // not just top: the first/last card's own left/right edges too.
                 .padding(.horizontal, 40)
                 .padding(.top, 40)
             }

@@ -309,7 +309,8 @@ enum CarPlayNavigation {
             } else {
                 topSongs = await ArtistTopSongsService.topSongs(
                     artistName: artist.name,
-                    albums: albums
+                    albums: albums,
+                    limit: 8
                 ) { albumID in
                     (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
                 }
@@ -332,7 +333,7 @@ enum CarPlayNavigation {
         topSongs: [Song],
         ic: CPInterfaceController
     ) {
-        // Sections are always [actions, top songs, albums] — every reactive
+        // Sections are always [actions, top songs, albums]; every reactive
         // rebuild below must keep all three, not just the one it recomputes.
         func rebuildActionsAsync() {
             Task { @MainActor [weak template] in
@@ -415,7 +416,7 @@ enum CarPlayNavigation {
             return (CPListSection(items: items, header: String(localized: "albums"), sectionIndexTitle: nil), coverMap)
         }
 
-        // Plain tap-to-play rows, no secondary actions — CarPlay has no room
+        // Plain tap-to-play rows, no secondary actions: CarPlay has no room
         // for a long-press menu, so this mirrors the album track list exactly.
         func makeSongsSection() -> CPListSection {
             let items = topSongs.enumerated().map { idx, song in

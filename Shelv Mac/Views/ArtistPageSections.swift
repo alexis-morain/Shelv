@@ -11,7 +11,7 @@ extension ArtistReleaseGroup {
     }
 }
 
-/// Identifies the full, sortable album list behind a release shelf's title —
+/// Identifies the full, sortable album list behind a release shelf's title:
 /// the escape hatch from a shelf that doesn't scale to a large discography.
 struct ArtistAlbumGroup: Hashable {
     let title: String
@@ -66,9 +66,9 @@ struct ArtistReleaseShelf: View {
     }
 }
 
-/// The full, sortable list behind a release shelf's title — same grid/list
-/// toggle and sort menu as the Library's own Albums screen, just scoped to
-/// this artist's releases.
+/// The full, sortable list behind a release shelf's title, with the same
+/// grid/list toggle and sort menu as the Library's own Albums screen, just
+/// scoped to this artist's releases.
 struct ArtistAllAlbumsView: View {
     let title: String
     let albums: [Album]

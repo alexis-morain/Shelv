@@ -107,9 +107,9 @@ struct SongActionsMenuContent: View {
 }
 
 /// An explicit "..." button carrying the same song actions as
-/// `personalizedSongSwipeActions`, for contexts — like a horizontal
-/// shelf/grid — where long-press and swipe conflict with the container's own
-/// scroll gestures instead of being reliably recognized.
+/// `personalizedSongSwipeActions`, for contexts like a horizontal shelf/grid
+/// where long-press and swipe conflict with the container's own scroll
+/// gestures instead of being reliably recognized.
 struct SongMenuButton: View {
     let song: Song
     let isOffline: Bool

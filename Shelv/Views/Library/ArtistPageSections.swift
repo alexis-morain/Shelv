@@ -62,8 +62,8 @@ struct ArtistSimilarArtistsRow: View {
 
 /// A horizontal shelf of releases, the way the rest of Discover presents
 /// albums. Splitting albums from singles reads better than one long grid with
-/// a filter on top of it. The title opens the full, sortable list — a shelf
-/// alone doesn't scale to an artist with a large discography.
+/// a filter on top of it. The title opens the full, sortable list, since a
+/// shelf alone doesn't scale to an artist with a large discography.
 struct ArtistReleaseShelf: View {
     let title: String
     let albums: [Album]
@@ -123,7 +123,7 @@ struct ArtistReleaseShelf: View {
 }
 
 /// The full, sortable list behind a release shelf's title. Plain navigation
-/// and sorting only — no swipe actions or context menu, the album's own
+/// and sorting only: no swipe actions or context menu, the album's own
 /// detail page and the shelf card already cover those. The list/grid choice
 /// that used to live on the artist page itself lives here now instead: this
 /// is the one place left where showing every release as a compact row versus

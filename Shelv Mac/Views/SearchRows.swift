@@ -90,7 +90,7 @@ struct SearchSongRow: View {
     /// keeps this a plain song row.
     var rank: Int? = nil
     /// Swaps the rank for the pulsing "now playing" waveform, the same as
-    /// the album track list — computed by the caller, same convention as
+    /// the album track list, computed by the caller, same convention as
     /// `TrackRow.isPlaying`.
     var isPlaying: Bool = false
     var showFavorite: Bool = false

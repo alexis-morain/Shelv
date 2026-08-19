@@ -5,7 +5,7 @@ import SwiftUI
 /// explicit "..." menu button instead of long-press/swipe. This shelf lives
 /// inside a horizontally scrolling grid, where long-press and swipe conflict
 /// with the grid's own gesture recognizer rather than being recognized
-/// reliably — the "..." button sidesteps that entirely.
+/// reliably; the "..." button sidesteps that entirely.
 struct ArtistTopSongCell: View {
     let rank: Int
     let song: Song

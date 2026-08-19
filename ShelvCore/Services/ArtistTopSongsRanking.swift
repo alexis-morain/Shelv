@@ -6,9 +6,6 @@ nonisolated enum ArtistTopSongsRanking {
     /// Songs kept for the section.
     static let limit = 10
 
-    /// Songs shown before the section is expanded.
-    static let collapsedLimit = 5
-
     /// Albums scanned by the play-count fallback, most played first. Artists
     /// with a deep back catalogue would otherwise fan out one album request
     /// per release just to fill a five-row list.

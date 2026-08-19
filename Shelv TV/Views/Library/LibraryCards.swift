@@ -583,6 +583,12 @@ struct DetailSongRow: View {
     var showsFavoriteBadge = true
     /// Rang-Zahl links vom Cover (Playlists/Recap). nil = keine Zahl (z.B. Queue).
     var rank: Int? = nil
+    /// Recap goes up to two digits (25/50 per period) and lines up with the
+    /// playcount/duration columns further right, so it needs the wider,
+    /// trailing-aligned column; the artist Top Songs shelf is capped at a
+    /// single digit and wants to sit flush with its section title instead.
+    var rankColumnWidth: CGFloat = 50
+    var rankColumnAlignment: Alignment = .trailing
     /// Recap: erste drei Ränge fett in Akzentfarbe hervorheben.
     var rankAccent: Bool = false
     /// Recap: Playcount des Songs (Periodenwert) anzeigen. nil = kein Badge.
@@ -603,7 +609,7 @@ struct DetailSongRow: View {
                     .monospacedDigit()
                     .lineLimit(1)
                     .foregroundStyle(isTop3 ? AnyShapeStyle(AppTheme.color(for: themeColor)) : AnyShapeStyle(.secondary))
-                    .frame(width: 26, alignment: .leading)
+                    .frame(width: rankColumnWidth, alignment: rankColumnAlignment)
             }
             if showArtwork {
                 CoverArtView(url: song.coverURL(200), size: 56, cornerRadius: 6)

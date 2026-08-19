@@ -413,7 +413,7 @@ struct ArtistDetailView: View {
     }
 
     /// Two columns of four, side by side when the window is wide enough,
-    /// one scroll apart when it isn't — same shelf as the artist page's
+    /// one scroll apart when it isn't, same shelf as the artist page's
     /// album/singles rows, just for songs instead of covers.
     private static let topSongsGridRows = Array(
         repeating: GridItem(.fixed(60), spacing: 4),
@@ -431,10 +431,10 @@ struct ArtistDetailView: View {
 
     private var topSongsSection: some View {
         GeometryReader { geo in
-            let cellWidth = min(max(geo.size.width - 40, Self.topSongsMinCellWidth), Self.topSongsMaxCellWidth)
-            let neededWidth = CGFloat(topSongsColumnCount) * cellWidth
-                + CGFloat(max(0, topSongsColumnCount - 1)) * 24
-                + 40
+            let columnGaps = CGFloat(max(0, topSongsColumnCount - 1)) * 24
+            let perColumnWidth = (geo.size.width - 40 - columnGaps) / CGFloat(topSongsColumnCount)
+            let cellWidth = min(max(perColumnWidth, Self.topSongsMinCellWidth), Self.topSongsMaxCellWidth)
+            let neededWidth = CGFloat(topSongsColumnCount) * cellWidth + columnGaps + 40
             let needsScrolling = neededWidth > geo.size.width
 
             VStack(alignment: .leading, spacing: 10) {
@@ -443,7 +443,7 @@ struct ArtistDetailView: View {
                         .font(.title2).bold()
                     Spacer()
                     // Only worth showing once there's actually something to
-                    // scroll to — a wide enough window shows every column.
+                    // scroll to: a wide enough window shows every column.
                     if needsScrolling {
                         HStack(spacing: 6) {
                             ShelfNavButton(icon: "chevron.left", disabled: topSongsAtStart) {
