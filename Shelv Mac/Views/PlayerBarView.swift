@@ -183,6 +183,7 @@ struct PlayerBarView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var radioStore = RadioStationStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
 
     private var audioBadge: String? {
         player.actualStreamFormat?.displayString
@@ -190,9 +191,12 @@ struct PlayerBarView: View {
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirectionMac") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
+    @State private var shareURL: URL?
+    @State private var shareErrorMessage: String?
 
     private var showFavoriteActions: Bool {
         personalizationVisibility.showFavoriteActions
@@ -330,17 +334,17 @@ struct PlayerBarView: View {
                         } else {
                             HStack(spacing: 22) {
                                 Group {
-                                    if showPlaylistActions, let song = player.currentSong {
-                                        Button {
-                                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                    if let song = player.currentSong {
+                                        Menu {
+                                            playerSongMenuItems(song)
                                         } label: {
-                                            Image(systemName: "music.note.list")
+                                            Image(systemName: "ellipsis.circle")
                                                 .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
                                         }
-                                        .buttonStyle(.plain)
-                                        .help(String(localized: "add_to_playlist"))
+                                        .menuStyle(.borderlessButton)
+                                        .fixedSize()
                                     } else {
-                                        Image(systemName: "music.note.list")
+                                        Image(systemName: "ellipsis.circle")
                                             .hidden()
                                     }
                                 }
@@ -543,6 +547,56 @@ struct PlayerBarView: View {
         .onChange(of: player.currentSong?.id ?? player.currentRadioStation?.id) { _, _ in displayTime = player.currentTime }
         .onChange(of: player.volume) { _, newVolume in
             rememberAudibleVolume(newVolume)
+        }
+        .sharingServicePicker(url: $shareURL)
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { shareErrorMessage != nil }, set: { if !$0 { shareErrorMessage = nil } }),
+            presenting: shareErrorMessage
+        ) { _ in
+            Button(String(localized: "ok")) {}
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    @ViewBuilder
+    private func playerSongMenuItems(_ song: Song) -> some View {
+        if showInstantMixActions && !offlineMode.isOffline {
+            Button(String(localized: "instant_mix")) {
+                InstantMixService.playSongMix(for: song)
+            }
+        }
+        Button(String(localized: "play_next")) {
+            player.addPlayNext(song)
+        }
+        Button(String(localized: "add_to_queue")) {
+            player.addToQueue(song)
+        }
+        if showPlaylistActions {
+            Divider()
+            Button(String(localized: "add_to_playlist")) {
+                NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+            }
+        }
+        Divider()
+        Button(String(localized: "share")) {
+            shareSong(song)
+        }
+    }
+
+    private func shareSong(_ song: Song) {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run { shareErrorMessage = String(localized: "share_link_failed") }
+                    return
+                }
+                await MainActor.run { shareURL = url }
+            } catch {
+                await MainActor.run { shareErrorMessage = error.localizedDescription }
+            }
         }
     }
 
