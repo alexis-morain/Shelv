@@ -93,6 +93,7 @@ struct PlayerView: View {
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
 
     @State private var seekValue: Double = 0
@@ -104,6 +105,8 @@ struct PlayerView: View {
     @State private var showLyricsSheet: Bool = false
     @State private var songInfoSong: Song?
     @State private var showSleepTimer = false
+    @State private var shareURL: IdentifiableURL?
+    @State private var currentToast: ShelveToast?
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
@@ -418,17 +421,12 @@ struct PlayerView: View {
 
                     // Sekundäre Buttons — Amperfy-Stil: grauer Kreis, .primary Icon
                     HStack {
-                        if !player.isRadioPlayback, showFavoriteActions && !offlineMode.isOffline, let song = player.currentSong {
-                            Button {
-                                Task { await libraryStore.toggleStarSong(song) }
+                        if !player.isRadioPlayback, let song = player.currentSong {
+                            Menu {
+                                playerSongMenuItems(song)
                             } label: {
-                                playerSecondaryButton(
-                                    icon: libraryStore.isSongStarred(song) ? "heart.fill" : "heart",
-                                    color: libraryStore.isSongStarred(song) ? Color.pink : Color.primary,
-                                    size: ctrl, isPad: isPad
-                                )
+                                playerSecondaryButton(icon: "ellipsis", color: .primary, size: ctrl, isPad: isPad)
                             }
-                            .buttonStyle(.plain)
                             Spacer()
                         }
 
@@ -445,10 +443,16 @@ struct PlayerView: View {
                             }
                             .buttonStyle(.plain)
 
-                            if showPlaylistActions && !offlineMode.isOffline {
+                            if showFavoriteActions && !offlineMode.isOffline, let song = player.currentSong {
                                 Spacer()
-                                Button { showAddToPlaylist = true } label: {
-                                    playerSecondaryButton(icon: "music.note.list", color: .primary, size: ctrl, isPad: isPad)
+                                Button {
+                                    Task { await libraryStore.toggleStarSong(song) }
+                                } label: {
+                                    playerSecondaryButton(
+                                        icon: libraryStore.isSongStarred(song) ? "heart.fill" : "heart",
+                                        color: libraryStore.isSongStarred(song) ? Color.pink : Color.primary,
+                                        size: ctrl, isPad: isPad
+                                    )
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -556,6 +560,10 @@ struct PlayerView: View {
                         .presentationDragIndicator(.visible)
                         .tint(accentColor)
                 }
+                .sheet(item: $shareURL) { wrapped in
+                    ActivityShareSheet(items: [wrapped.url])
+                }
+                .shelveToast($currentToast)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -768,6 +776,70 @@ struct PlayerView: View {
             .font(.system(size: isPad ? 22 : 20, weight: .medium))
             .foregroundStyle(color)
             .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private func playerSongMenuItems(_ song: Song) -> some View {
+        if showInstantMixActions && !offlineMode.isOffline {
+            Button {
+                InstantMixService.playSongMix(for: song)
+            } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+
+            Divider()
+        }
+
+        Button {
+            player.addPlayNext(song)
+            currentToast = ShelveToast(message: String(localized: "plays_next"))
+        } label: {
+            Label(String(localized: "play_next"), systemImage: "text.insert")
+        }
+
+        Button {
+            player.addToQueue(song)
+            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
+        } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+        }
+
+        if showPlaylistActions && !offlineMode.isOffline {
+            Divider()
+
+            Button {
+                showAddToPlaylist = true
+            } label: {
+                Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
+            }
+        }
+
+        Divider()
+
+        Button {
+            shareSong(song)
+        } label: {
+            Label(String(localized: "share"), systemImage: "square.and.arrow.up")
+        }
+    }
+
+    private func shareSong(_ song: Song) {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run {
+                        currentToast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
+                    }
+                    return
+                }
+                await MainActor.run { shareURL = IdentifiableURL(url: url) }
+            } catch {
+                await MainActor.run {
+                    currentToast = ShelveToast(message: error.localizedDescription, isError: true)
+                }
+            }
+        }
     }
 
     private func updatePlayerBackground() async {
