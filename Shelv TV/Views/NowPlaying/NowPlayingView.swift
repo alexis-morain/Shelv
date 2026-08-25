@@ -11,8 +11,11 @@ struct NowPlayingView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var radioStore = RadioStationStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirectionTV") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @Environment(\.scenePhase) private var scenePhase
     private var accent: Color { AppTheme.color(for: themeColor) }
@@ -25,6 +28,7 @@ struct NowPlayingView: View {
     @State private var displayDuration: Double = 0
     @State private var panel: TVNowPlayingPanel?
     @State private var showSleepTimer = false
+    @State private var showAddToPlaylist = false
     @State private var songInfoSong: Song?
     @FocusState private var songTitleFocused: Bool
 
@@ -228,6 +232,13 @@ struct NowPlayingView: View {
                     }
                     Button { player.stop() } label: { Image(systemName: "stop.fill") }
                 } else {
+                    if let song = player.currentSong {
+                        Menu {
+                            playerSongMenuItems(song)
+                        } label: {
+                            Image(systemName: "ellipsis")
+                        }
+                    }
                     if showFavoriteActions, let song = player.currentSong {
                         Button { Task { await library.toggleStarSong(song) } } label: {
                             Image(systemName: library.isSongStarred(song) ? "heart.fill" : "heart")
@@ -263,6 +274,28 @@ struct NowPlayingView: View {
                 Button(sleepTimerRowLabel(minutes: minutes)) {
                     player.setSleepTimer(minutes: minutes)
                 }
+            }
+        }
+        .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: player.currentSong.map { [$0.id] } ?? [])
+    }
+
+    @ViewBuilder
+    private func playerSongMenuItems(_ song: Song) -> some View {
+        if showInstantMixActions && !offlineMode.isOffline {
+            Button { InstantMixService.playSongMix(for: song, player: player) } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+        }
+        Button { player.addPlayNext(song) } label: {
+            Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+        }
+        Button { player.addToQueue(song) } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.append")
+        }
+        if showPlaylistActions {
+            Divider()
+            Button { showAddToPlaylist = true } label: {
+                Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
             }
         }
     }
