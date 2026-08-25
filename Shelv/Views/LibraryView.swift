@@ -1312,8 +1312,17 @@ struct LibraryView: View {
     }
 
     private var favoriteSongsPage: some View {
-        List {
-            favoriteSongRows(displayStarredSongs(using: downloadedLibrarySnapshot))
+        let songs = displayStarredSongs(using: downloadedLibrarySnapshot)
+        return List {
+            if !songs.isEmpty {
+                Section {
+                    favoriteSongsPlayShuffleHeader(songs)
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
+            }
+            favoriteSongRows(songs)
             PlayerBottomSpacer()
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
@@ -1321,6 +1330,39 @@ struct LibraryView: View {
         }
         .listStyle(.plain)
         .navigationTitle(String(localized: "favorite_songs"))
+    }
+
+    private func favoriteSongsPlayShuffleHeader(_ songs: [Song]) -> some View {
+        HStack(spacing: 14) {
+            Button {
+                player.play(songs: songs, startIndex: 0)
+            } label: {
+                Label(String(localized: "play"), systemImage: "play.fill")
+                    .font(.body).bold()
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(accentColor)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                player.playShuffled(songs: songs)
+            } label: {
+                Label(String(localized: "shuffle"), systemImage: "shuffle")
+                    .font(.body).bold()
+                    .foregroundStyle(accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(accentColor.opacity(0.15))
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
     }
 
     private var favoriteArtistsPage: some View {
