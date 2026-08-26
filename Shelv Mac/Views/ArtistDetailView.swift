@@ -767,10 +767,33 @@ class ArtistDetailViewModel: ObservableObject {
                 id: artistId,
                 similarArtistCount: ArtistPageLayout.similarArtistCount
             )
+            // Started here rather than after the detail arrives, so the shelf is
+            // part of the first render instead of popping in a moment later.
+            async let serverTopSongs = ArtistTopSongsService.serverRanked(
+                artistName: artistName,
+                limit: 8
+            )
+            // Everything is awaited into locals first and only then written to
+            // state in one go. Assigning between two awaits lets SwiftUI render in
+            // between, which is what made the sections appear one after another.
             let detail = try await artistDetail
+            let info = try? await artistInfo
+            var loadedTopSongs = await serverTopSongs
+            // The fallback ranking is part of the same wait: letting it run after
+            // the page is up is exactly what made the shelf appear on its own.
+            if loadedTopSongs.isEmpty {
+                loadedTopSongs = await ArtistTopSongsService.topSongs(
+                    artistName: artistName,
+                    albums: detail.album ?? [],
+                    limit: 8
+                ) { albumID in
+                    (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+                }
+            }
+
             artist = detail
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-            let info = try? await artistInfo
+            topSongs = loadedTopSongs
             biography = info?.biography?.strippingHTML
             // Servers can list a track/featured artist with no album of their
             // own here; tapping through would land on an empty artist page.
@@ -783,25 +806,6 @@ class ArtistDetailViewModel: ObservableObject {
             if artist == nil { errorMessage = inlineMessage }
         }
         isLoading = false
-        await loadTopSongs()
-    }
-
-    /// Loaded after the albums are on screen: the ranking is a bonus section,
-    /// it must never delay the page itself.
-    private func loadTopSongs() async {
-        guard !OfflineModeService.shared.isOffline else {
-            topSongs = []
-            return
-        }
-        let songs = await ArtistTopSongsService.topSongs(
-            artistName: artist?.name ?? "",
-            albums: albums,
-            limit: 8
-        ) { albumID in
-            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
-        }
-        guard !Task.isCancelled else { return }
-        topSongs = songs
     }
 
     private func populateFromLocal(artistId: String, artistName: String) {
