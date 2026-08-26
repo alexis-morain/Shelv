@@ -1083,7 +1083,16 @@ class RecapStore: ObservableObject {
         let toDelete = all.suffix(all.count - limit)
         for entry in toDelete {
             CloudKitSyncService.debugLog("[Retention:manual] deleting playlistId=\(entry.playlistId) marker=\(entry.ckRecordName ?? "nil") period=\(entry.periodType)")
-            try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
+            do {
+                try await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
+            } catch where Self.isDefinitiveNotFound(error) {
+                CloudKitSyncService.debugLog("[Retention:manual] playlist already gone on server, forgetting locally")
+            } catch {
+                // Nicht lokal vergessen, wenn der Server-Delete fehlschlägt — sonst bleibt die
+                // Playlist als Waise auf dem Server liegen und wird nie erneut versucht.
+                CloudKitSyncService.debugLog("[Retention:manual] delete FAILED, keeping local entry for retry: \(error.localizedDescription)")
+                continue
+            }
             if let ckName = entry.ckRecordName {
                 await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
             }
