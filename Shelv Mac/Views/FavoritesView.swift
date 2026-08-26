@@ -15,6 +15,9 @@ struct FavoritesView: View {
     @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
+    @State private var searchText: String = ""
+    @State private var playbackTask: Task<Void, Never>?
+    @State private var isPreparingPlayback = false
     private let scope: FavoritesScope
 
     private var showPlaylistActions: Bool {
@@ -33,29 +36,164 @@ struct FavoritesView: View {
         offlineMode.isOffline || showDownloadsOnly
     }
 
+    /// The filter field only exists on the overview, so the dedicated
+    /// albums/songs/artists pages keep showing everything.
+    private var activeQuery: String {
+        guard scope == .overview else { return "" }
+        return searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func matches(_ values: String?...) -> Bool {
+        let query = activeQuery
+        guard !query.isEmpty else { return true }
+        return values.contains { $0?.localizedCaseInsensitiveContains(query) == true }
+    }
+
     private var visibleArtists: [Artist] {
-        guard effectiveShowDownloadsOnly else { return libraryStore.starredArtists }
-        let downloadedNames = Set(downloadStore.artists.map(\.name))
-        return libraryStore.starredArtists.filter { downloadedNames.contains($0.name) }
+        var artists = libraryStore.starredArtists
+        if effectiveShowDownloadsOnly {
+            let downloadedNames = Set(downloadStore.artists.map(\.name))
+            artists = artists.filter { downloadedNames.contains($0.name) }
+        }
+        return artists.filter { matches($0.name) }
     }
 
     private var visibleAlbums: [Album] {
-        guard effectiveShowDownloadsOnly else { return libraryStore.starredAlbums }
-        let downloadedIds = Set(downloadStore.albums.map(\.albumId))
-        return libraryStore.starredAlbums.filter { downloadedIds.contains($0.id) }
+        var albums = libraryStore.starredAlbums
+        if effectiveShowDownloadsOnly {
+            let downloadedIds = Set(downloadStore.albums.map(\.albumId))
+            albums = albums.filter { downloadedIds.contains($0.id) }
+        }
+        return albums.filter { matches($0.name, $0.artist) }
     }
 
     private var visibleSongs: [Song] {
-        guard effectiveShowDownloadsOnly else { return libraryStore.starredSongs }
-        return libraryStore.starredSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
+        var songs = libraryStore.starredSongs
+        if effectiveShowDownloadsOnly {
+            songs = songs.filter { downloadStore.isDownloaded(songId: $0.id) }
+        }
+        return songs.filter { matches($0.title, $0.artist, $0.album) }
     }
 
     var body: some View {
-        ScrollView {
-            favoritesContent
+        VStack(spacing: 0) {
+            if scope == .overview {
+                HStack {
+                    TextField(String(localized: "filter"), text: $searchText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(minWidth: 160, idealWidth: 220, maxWidth: 220)
+                    Spacer()
+                    playbackButtons
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(.bar)
+
+                Divider()
+            }
+            ScrollView {
+                favoritesContent
+            }
         }
         .navigationTitle(navigationTitle)
         .task { await libraryStore.loadStarred() }
+        .onDisappear { cancelPlaybackPreparation() }
+    }
+
+    /// Shuffle only: favorites have no meaningful order of their own, and playing
+    /// them straight through would alternate a single track with a whole album.
+    @ViewBuilder
+    private var playbackButtons: some View {
+        Button {
+            prepareFavoritesForPlayback()
+        } label: {
+            Group {
+                if isPreparingPlayback {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "shuffle")
+                        .font(.title3)
+                }
+            }
+            .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .disabled(hasNoFavoritePlayback || isPreparingPlayback)
+        .help(String(localized: "shuffle"))
+        .accessibilityLabel(String(localized: "shuffle"))
+    }
+
+    private var hasNoFavoritePlayback: Bool {
+        visibleAlbums.isEmpty && visibleSongs.isEmpty
+    }
+
+    /// Shuffles the favorite songs together with every track of the favorite
+    /// albums. Favorite artists are left out on purpose: a single artist can add
+    /// hundreds of tracks and needs its whole discography fetched first.
+    private func prepareFavoritesForPlayback() {
+        let albums = visibleAlbums
+        let favoriteSongs = visibleSongs
+        guard !albums.isEmpty || !favoriteSongs.isEmpty else { return }
+
+        playbackTask?.cancel()
+        isPreparingPlayback = true
+
+        let useDownloadedSongs = effectiveShowDownloadsOnly
+        let downloadedSongsByAlbumID = Dictionary(
+            downloadStore.albums.map { album in
+                (album.albumId, album.songs.map { $0.asSong() })
+            },
+            uniquingKeysWith: { _, latest in latest }
+        )
+        let api = SubsonicAPIService.shared
+        let serverID = api.activeServer?.id
+        let player = appState.player
+
+        playbackTask = Task { @MainActor in
+            var collected: [Song] = []
+            var seen = Set<String>()
+            for song in favoriteSongs where seen.insert(song.id).inserted {
+                collected.append(song)
+            }
+            for album in albums {
+                let albumSongs: [Song]
+                if useDownloadedSongs {
+                    albumSongs = downloadedSongsByAlbumID[album.id] ?? []
+                } else if let known = album.songs {
+                    albumSongs = known
+                } else {
+                    albumSongs = (try? await api.getAlbum(id: album.id, retries: 1).song) ?? []
+                }
+                for song in albumSongs where seen.insert(song.id).inserted {
+                    collected.append(song)
+                }
+            }
+
+            guard !Task.isCancelled, api.activeServer?.id == serverID else {
+                isPreparingPlayback = false
+                return
+            }
+
+            isPreparingPlayback = false
+            playbackTask = nil
+
+            guard !collected.isEmpty else {
+                NotificationCenter.default.post(
+                    name: .showToast,
+                    object: String(localized: "playback_failed")
+                )
+                return
+            }
+
+            player.playShuffled(songs: collected)
+        }
+    }
+
+    private func cancelPlaybackPreparation() {
+        playbackTask?.cancel()
+        playbackTask = nil
+        isPreparingPlayback = false
     }
 
     private var navigationTitle: String {
@@ -81,6 +219,9 @@ struct FavoritesView: View {
         if libraryStore.isLoadingStarred && isCurrentScopeEmpty {
             ProgressView(String(localized: "loading_favorites"))
                 .frame(maxWidth: .infinity)
+                .padding(.vertical, 60)
+        } else if isCurrentScopeEmpty, !activeQuery.isEmpty {
+            ContentUnavailableView.search(text: activeQuery)
                 .padding(.vertical, 60)
         } else if isCurrentScopeEmpty {
             ContentUnavailableView(
@@ -114,17 +255,17 @@ struct FavoritesView: View {
 
     private var favoritesOverview: some View {
         VStack(alignment: .leading, spacing: 28) {
-            if !visibleAlbums.isEmpty {
-                FavoritesSection(title: String(localized: "albums")) {
-                    albumGrid(Array(visibleAlbums.prefix(FavoritePresentation.previewLimit)))
-                    showAllLinkIfNeeded(scope: .albums, count: visibleAlbums.count)
-                }
-            }
-
             if !visibleSongs.isEmpty {
                 FavoritesSection(title: String(localized: "tracks")) {
                     songList(Array(visibleSongs.prefix(FavoritePresentation.previewLimit)))
                     showAllLinkIfNeeded(scope: .songs, count: visibleSongs.count)
+                }
+            }
+
+            if !visibleAlbums.isEmpty {
+                FavoritesSection(title: String(localized: "albums")) {
+                    albumGrid(Array(visibleAlbums.prefix(FavoritePresentation.previewLimit)))
+                    showAllLinkIfNeeded(scope: .albums, count: visibleAlbums.count)
                 }
             }
 
@@ -137,8 +278,11 @@ struct FavoritesView: View {
         }
     }
 
+    // Same column metrics as the albums page: the cover is 160pt wide, so a
+    // narrower minimum let the grid centre it inside its column and pushed it
+    // to the right of the section title.
     private func albumGrid(_ albums: [Album]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 16)], spacing: 20) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)], alignment: .leading, spacing: 20) {
             ForEach(albums) { album in
                 NavigationLink(value: album) {
                     AlbumGridItem(album: album, showsFavoriteBadge: false)
@@ -151,8 +295,9 @@ struct FavoritesView: View {
         }
     }
 
+    // Same column metrics as the artists page (portrait is 140pt wide).
     private func artistGrid(_ artists: [Artist]) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 170), spacing: 16)], spacing: 20) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 180), spacing: 16)], alignment: .leading, spacing: 20) {
             ForEach(artists) { artist in
                 NavigationLink(value: artist) {
                     ArtistGridItem(
@@ -283,7 +428,10 @@ struct FavoriteSongRow: View {
                 .monospacedDigit()
         }
         .frame(height: 52)
-        .padding(.horizontal, 12)
+        // 20 matches the page's outer padding, which `songList` cancels out with a
+        // negative inset so the hover background spans the full width. Without it
+        // the track titles sat left of the section headings and the covers.
+        .padding(.horizontal, 20)
         .background {
             Color(NSColor.windowBackgroundColor)
             if isHovered {

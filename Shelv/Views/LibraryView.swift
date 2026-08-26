@@ -438,6 +438,7 @@ struct LibraryView: View {
     @State private var navigateToAlbum: Album?
     @State private var navigateToArtist: Artist?
     @State private var currentToast: ShelveToast?
+    @State private var isCollectingFavorites = false
     @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
@@ -526,8 +527,8 @@ struct LibraryView: View {
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if segment != .favorites {
-            ToolbarItemGroup(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            if segment != .favorites {
                 if segment == .albums && showGenreFilter {
                     LibraryGenreFilterMenu(
                         selectedGenre: $albumGenreFilterRaw,
@@ -564,6 +565,21 @@ struct LibraryView: View {
                         onShuffle: { prepareVisibleAlbumsForPlayback(shuffled: true) }
                     )
                 }
+            } else {
+                // Same toolbar slot as the albums segment. Shuffle only: favorites
+                // have no order of their own, and playing them straight through
+                // would alternate a single track with a whole album.
+                let snapshot = downloadedLibrarySnapshot
+                let favoriteSongs = displayStarredSongs(using: snapshot)
+                let favoriteAlbums = displayStarredAlbums(using: snapshot)
+                LibraryShuffleButton(
+                    isLoading: isCollectingFavorites,
+                    isDisabled: favoriteSongs.isEmpty && favoriteAlbums.isEmpty,
+                    accentColor: accentColor,
+                    onShuffle: {
+                        shuffleFavorites(songs: favoriteSongs, albums: favoriteAlbums)
+                    }
+                )
             }
         }
     }
@@ -1132,22 +1148,22 @@ struct LibraryView: View {
             )
         } else {
             List {
-                if hasAlbums {
-                    Section(String(localized: "albums")) {
-                        favoriteAlbumRows(Array(albums.prefix(FavoritePresentation.previewLimit)))
-                        if albums.count > FavoritePresentation.previewLimit {
-                            showAllFavoritesLink(count: albums.count) {
-                                favoriteAlbumsPage
-                            }
-                        }
-                    }
-                }
                 if hasSongs {
                     Section(String(localized: "songs")) {
                         favoriteSongRows(Array(songs.prefix(FavoritePresentation.previewLimit)))
                         if songs.count > FavoritePresentation.previewLimit {
                             showAllFavoritesLink(count: songs.count) {
                                 favoriteSongsPage
+                            }
+                        }
+                    }
+                }
+                if hasAlbums {
+                    Section(String(localized: "albums")) {
+                        favoriteAlbumRows(Array(albums.prefix(FavoritePresentation.previewLimit)))
+                        if albums.count > FavoritePresentation.previewLimit {
+                            showAllFavoritesLink(count: albums.count) {
+                                favoriteAlbumsPage
                             }
                         }
                     }
@@ -1169,6 +1185,30 @@ struct LibraryView: View {
             }
             .listStyle(.plain)
             .scrollIndicators(.hidden)
+        }
+    }
+
+    /// Shuffles the favorite songs together with every track of the favorite
+    /// albums. Favorite artists are left out on purpose: a single artist can add
+    /// hundreds of tracks and needs its whole discography fetched first.
+    private func shuffleFavorites(songs: [Song], albums: [Album]) {
+        guard !isCollectingFavorites else { return }
+        isCollectingFavorites = true
+        haptic()
+        Task {
+            defer { isCollectingFavorites = false }
+            var collected: [Song] = []
+            var seen = Set<String>()
+            for song in songs where seen.insert(song.id).inserted {
+                collected.append(song)
+            }
+            for album in albums {
+                for song in await songsForAlbum(album) where seen.insert(song.id).inserted {
+                    collected.append(song)
+                }
+            }
+            guard !collected.isEmpty else { return }
+            player.playShuffled(songs: collected)
         }
     }
 
