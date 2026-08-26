@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import UIKit
 
 private struct NativePlayerProgressSlider: View {
     @Binding var value: Double
@@ -92,21 +93,13 @@ struct PlayerView: View {
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
 
-    @State private var seekValue: Double = 0
-    @State private var isDragging: Bool = false
-    @State private var displayTime: Double = 0
-    @State private var displayDuration: Double = 0
+    @State private var currentToast: ShelveToast?
     @State private var showQueue: Bool = false
-    @State private var showAddToPlaylist = false
     @State private var showLyricsSheet: Bool = false
     @State private var songInfoSong: Song?
     @State private var showSleepTimer = false
-    @State private var shareURL: IdentifiableURL?
-    @State private var currentToast: ShelveToast?
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
@@ -134,15 +127,6 @@ struct PlayerView: View {
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
     private var usesNativeInterface: Bool {
         PersonalizationMiniPlayerStyle(rawValue: interfaceStyleRaw) == .native
-    }
-    private var progressFraction: Binding<Double> {
-        Binding(
-            get: { displayDuration > 0 ? displayTime / displayDuration : 0 },
-            set: { seekValue = min(1, max(0, $0)) }
-        )
-    }
-    private var activeProgressFraction: Binding<Double> {
-        (isDragging || player.isSeeking) ? $seekValue : progressFraction
     }
     private var playerBackgroundIdentifier: String {
         PlayerBackgroundPaletteStore.identifier(for: player)
@@ -232,38 +216,6 @@ struct PlayerView: View {
         return h < 680 ? max(small * 0.5, 4) : small
     }
 
-    @ViewBuilder
-    private var playbackProgressControl: some View {
-        if usesNativeInterface {
-            NativePlayerProgressSlider(
-                value: activeProgressFraction,
-                trackColor: Color.primary.opacity(colorScheme == .dark ? 0.18 : 0.14),
-                fillColor: Color.primary.opacity(0.88),
-                onEditingChanged: handleSeekEditing
-            )
-        } else {
-            Slider(
-                value: activeProgressFraction,
-                in: 0...1
-            ) { editing in
-                handleSeekEditing(editing)
-            }
-            .tint(accentColor)
-        }
-    }
-
-    private func handleSeekEditing(_ editing: Bool) {
-        if editing {
-            isDragging = true
-            seekValue = displayDuration > 0 ? displayTime / displayDuration : 0
-        } else {
-            let seconds = seekValue * displayDuration
-            displayTime = seconds
-            player.seek(to: seconds)
-            isDragging = false
-        }
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -341,15 +293,11 @@ struct PlayerView: View {
                             }
                             .frame(height: 32)
                         } else {
-                            playbackProgressControl
-
-                            HStack {
-                                Text(formatTime(isDragging ? seekValue * displayDuration : displayTime))
-                                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                                Spacer()
-                                Text(formatTime(displayDuration))
-                                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                            }
+                            PlayerProgressSection(
+                                usesNativeInterface: usesNativeInterface,
+                                accentColor: accentColor,
+                                colorScheme: colorScheme
+                            )
                         }
 
                         HStack(spacing: 4) {
@@ -422,11 +370,7 @@ struct PlayerView: View {
                     // Sekundäre Buttons — Amperfy-Stil: grauer Kreis, .primary Icon
                     HStack {
                         if !player.isRadioPlayback, let song = player.currentSong {
-                            Menu {
-                                playerSongMenuItems(song)
-                            } label: {
-                                playerSecondaryButton(icon: "ellipsis", color: .primary, size: ctrl, isPad: isPad)
-                            }
+                            PlayerSongActionsMenu(song: song, size: ctrl, isPad: isPad, toast: $currentToast)
                             Spacer()
                         }
 
@@ -512,16 +456,9 @@ struct PlayerView: View {
                 .task(id: playerBackgroundIdentifier) {
                     await updatePlayerBackground()
                 }
-                .onReceive(player.timePublisher) { update in
-                    guard !isDragging, !player.isSeeking else { return }
-                    displayTime = update.time
-                    displayDuration = update.duration
-                }
                 .onAppear {
                     syncCachedPlayerBackgroundIfAvailable()
                     isPlayerVisible = true
-                    displayTime = player.currentTime
-                    displayDuration = player.duration
                 }
                 .onDisappear {
                     isPlayerVisible = false
@@ -544,14 +481,6 @@ struct PlayerView: View {
                         .presentationDragIndicator(.visible)
                         .tint(accentColor)
                 }
-                .sheet(isPresented: $showAddToPlaylist) {
-                    if let song = player.currentSong {
-                        AddToPlaylistSheet(songIds: [song.id])
-                            .environmentObject(libraryStore)
-                            .environment(\.colorScheme, colorScheme)
-                            .tint(accentColor)
-                    }
-                }
                 .sheet(isPresented: $showSleepTimer) {
                     SleepTimerPanel()
                         .environment(\.colorScheme, colorScheme)
@@ -560,16 +489,17 @@ struct PlayerView: View {
                         .presentationDragIndicator(.visible)
                         .tint(accentColor)
                 }
-                .sheet(item: $shareURL) { wrapped in
-                    ActivityShareSheet(items: [wrapped.url])
-                }
-                .shelveToast($currentToast)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.keyboard)
         .environment(\.colorScheme, .dark)
+        // On the outer level (not inside the GeometryReader, whose content starts
+        // below the navigation bar) and pulled up over the transparent nav bar,
+        // so the banner sits right under the status bar. Hosting it on the small
+        // menu button instead drew the capsule in the bottom corner.
+        .shelveToast($currentToast, topPadding: -34)
     }
     }
 
@@ -778,70 +708,6 @@ struct PlayerView: View {
             .frame(width: size, height: size)
     }
 
-    @ViewBuilder
-    private func playerSongMenuItems(_ song: Song) -> some View {
-        if showInstantMixActions && !offlineMode.isOffline {
-            Button {
-                InstantMixService.playSongMix(for: song)
-            } label: {
-                Label(String(localized: "instant_mix"), systemImage: "sparkles")
-            }
-
-            Divider()
-        }
-
-        Button {
-            player.addPlayNext(song)
-            currentToast = ShelveToast(message: String(localized: "plays_next"))
-        } label: {
-            Label(String(localized: "play_next"), systemImage: "text.insert")
-        }
-
-        Button {
-            player.addToQueue(song)
-            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-        } label: {
-            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
-        }
-
-        if showPlaylistActions && !offlineMode.isOffline {
-            Divider()
-
-            Button {
-                showAddToPlaylist = true
-            } label: {
-                Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
-            }
-        }
-
-        Divider()
-
-        Button {
-            shareSong(song)
-        } label: {
-            Label(String(localized: "share"), systemImage: "square.and.arrow.up")
-        }
-    }
-
-    private func shareSong(_ song: Song) {
-        Task {
-            do {
-                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
-                guard let url = URL(string: share.url) else {
-                    await MainActor.run {
-                        currentToast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
-                    }
-                    return
-                }
-                await MainActor.run { shareURL = IdentifiableURL(url: url) }
-            } catch {
-                await MainActor.run {
-                    currentToast = ShelveToast(message: error.localizedDescription, isError: true)
-                }
-            }
-        }
-    }
-
     private func updatePlayerBackground() async {
         let key = playerBackgroundIdentifier
         guard !PlayerBackgroundPaletteStore.isEmptyIdentifier(key) else {
@@ -986,11 +852,261 @@ struct PlayerView: View {
     private var audioBadge: String? {
         player.actualStreamFormat?.displayString
     }
+}
+
+/// Owns the playback position state and subscribes to `timePublisher` itself, so
+/// the ticking (many times per second during playback) only re-renders this small
+/// view instead of PlayerView's whole body. That body contains the "..." menu
+/// button, and re-rendering the hierarchy behind an open menu makes the system
+/// re-take its blurred backdrop snapshot, which is the flickering: it appeared
+/// only while playing (the publisher is silent when paused) and stayed after the
+/// menu itself was reimplemented in UIKit, because the menu was never the cause.
+private struct PlayerProgressSection: View {
+    let usesNativeInterface: Bool
+    let accentColor: Color
+    let colorScheme: ColorScheme
+
+    @ObservedObject private var player = AudioPlayerService.shared
+
+    @State private var seekValue: Double = 0
+    @State private var isDragging = false
+    @State private var displayTime: Double = 0
+    @State private var displayDuration: Double = 0
+
+    private var progressFraction: Binding<Double> {
+        Binding(
+            get: { displayDuration > 0 ? displayTime / displayDuration : 0 },
+            set: { seekValue = min(1, max(0, $0)) }
+        )
+    }
+
+    private var activeProgressFraction: Binding<Double> {
+        (isDragging || player.isSeeking) ? $seekValue : progressFraction
+    }
+
+    var body: some View {
+        Group {
+            if usesNativeInterface {
+                NativePlayerProgressSlider(
+                    value: activeProgressFraction,
+                    trackColor: Color.primary.opacity(colorScheme == .dark ? 0.18 : 0.14),
+                    fillColor: Color.primary.opacity(0.88),
+                    onEditingChanged: handleSeekEditing
+                )
+            } else {
+                Slider(
+                    value: activeProgressFraction,
+                    in: 0...1
+                ) { editing in
+                    handleSeekEditing(editing)
+                }
+                .tint(accentColor)
+            }
+
+            HStack {
+                Text(formatTime(isDragging ? seekValue * displayDuration : displayTime))
+                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                Spacer()
+                Text(formatTime(displayDuration))
+                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .onReceive(player.timePublisher) { update in
+            guard !isDragging, !player.isSeeking else { return }
+            displayTime = update.time
+            displayDuration = update.duration
+        }
+        .onAppear {
+            displayTime = player.currentTime
+            displayDuration = player.duration
+        }
+    }
+
+    private func handleSeekEditing(_ editing: Bool) {
+        if editing {
+            isDragging = true
+            seekValue = displayDuration > 0 ? displayTime / displayDuration : 0
+        } else {
+            let seconds = seekValue * displayDuration
+            displayTime = seconds
+            player.seek(to: seconds)
+            isDragging = false
+        }
+    }
 
     private func formatTime(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// A native `UIButton` + `UIMenu`, not SwiftUI's `Menu`. SwiftUI's `Menu`, while
+/// open, is disturbed by ANY re-evaluation of its surrounding view body — this is
+/// a documented SwiftUI limitation (e.g. reports of CloudKit sync dismissing an
+/// open Menu), not specific to this screen: when state elsewhere in the same body
+/// changes, every control in that body re-evaluates, including a currently-open
+/// Menu, which can flicker or dismiss/reopen. PlayerView's `displayTime` ticks
+/// many times per second during playback (silent while paused, matching exactly
+/// the "flickers only while playing" symptom), and the HStack holding this button
+/// is inline content in PlayerView's body, not an isolated view, so it re-
+/// reconciles on every tick even though this button's own inputs don't change.
+/// A native UIMenu, once presented, is owned entirely by UIKit and doesn't
+/// observe SwiftUI's render cycle at all — the same reasoning as the Mac player's
+/// native NSMenu trigger, which has never shown this symptom.
+///
+/// Item order/conditions intentionally mirror `SongActionsMenuContent` (the
+/// long-press menu shown elsewhere for a song), minus Play/Favorite/Details —
+/// the player has its own always-visible favorite button and reaches details by
+/// tapping the title. `UIMenu` can't embed that SwiftUI view directly, so the
+/// order is reproduced by hand here; see that file if the reference ever changes.
+private struct PlayerSongActionsMenu: View {
+    let song: Song
+    let size: CGFloat
+    let isPad: Bool
+
+    @ObservedObject private var libraryStore = LibraryStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    @State private var showAddToPlaylist = false
+    @State private var shareURL: IdentifiableURL?
+    @Binding var toast: ShelveToast?
+
+    var body: some View {
+        // The icon is a plain SwiftUI Image, exactly like the other buttons in
+        // this row (`playerSecondaryButton`), with the UIKit menu trigger as an
+        // invisible overlay on top. The trigger carries no image or title of its
+        // own, so UIKit has nothing to draw into it — that's what killed the
+        // oval checkmark badge: UIButton renders its own selected/highlight
+        // state, and no flag reliably suppresses that once the button is visible.
+        Image(systemName: "ellipsis")
+            .font(.system(size: isPad ? 22 : 20, weight: .medium))
+            .foregroundStyle(Color.primary)
+            .frame(width: size, height: size)
+            .contentShape(Rectangle())
+            .overlay {
+                PlayerSongActionsMenuTrigger(
+                    showInstantMix: showInstantMixActions && !offlineMode.isOffline,
+                    showAddToPlaylist: showPlaylistActions && !offlineMode.isOffline,
+                    onInstantMix: {
+                        InstantMixService.playSongMix(for: song)
+                    },
+                    onPlayNext: {
+                        haptic()
+                        AudioPlayerService.shared.addPlayNext(song)
+                        toast = ShelveToast(message: String(localized: "plays_next"))
+                    },
+                    onAddToQueue: {
+                        haptic()
+                        AudioPlayerService.shared.addToQueue(song)
+                        toast = ShelveToast(message: String(localized: "added_to_queue"))
+                    },
+                    onAddToPlaylist: {
+                        showAddToPlaylist = true
+                    },
+                    onShare: {
+                        shareSong()
+                    }
+                )
+            }
+        .sheet(isPresented: $showAddToPlaylist) {
+            AddToPlaylistSheet(songIds: [song.id])
+                .environmentObject(libraryStore)
+                .tint(accentColor)
+        }
+        .sheet(item: $shareURL) { wrapped in
+            ActivityShareSheet(items: [wrapped.url])
+        }
+    }
+
+    private func shareSong() {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run {
+                        toast = ShelveToast(message: String(localized: "share_link_failed"), isError: true)
+                    }
+                    return
+                }
+                await MainActor.run { shareURL = IdentifiableURL(url: url) }
+            } catch {
+                await MainActor.run {
+                    toast = ShelveToast(message: error.localizedDescription, isError: true)
+                }
+            }
+        }
+    }
+}
+
+/// An invisible tap target that only presents the menu — no image, no title, no
+/// configuration, so UIKit has nothing to render and can't show a selected-state
+/// badge over the icon. The visible "..." is a SwiftUI Image underneath it.
+private struct PlayerSongActionsMenuTrigger: UIViewRepresentable {
+    let showInstantMix: Bool
+    let showAddToPlaylist: Bool
+    let onInstantMix: () -> Void
+    let onPlayNext: () -> Void
+    let onAddToQueue: () -> Void
+    let onAddToPlaylist: () -> Void
+    let onShare: () -> Void
+
+    func makeUIView(context: Context) -> UIButton {
+        let button = UIButton(type: .custom)
+        button.showsMenuAsPrimaryAction = true
+        button.backgroundColor = .clear
+        // PlayerView forces `colorScheme = .dark` for its dark artwork gradient,
+        // but that's SwiftUI-only — a UIKit view resolves colors against the real
+        // trait collection. Force the same style so the menu itself matches.
+        button.overrideUserInterfaceStyle = .dark
+        button.tintColor = .label
+        // The player's button row sits at the bottom of the screen, so the menu
+        // opens upward — and UIKit then REVERSES the item order by default, so
+        // the last item (Share) ends up visually on top. That's deliberate Apple
+        // behavior (items nearest the finger first) and it's why no amount of
+        // reordering the items themselves changes anything. `.fixed` is the only
+        // switch that turns it off, and it has no SwiftUI `Menu` equivalent —
+        // which is exactly why this needs to be a UIKit button.
+        button.preferredMenuElementOrder = .fixed
+        return button
+    }
+
+    func updateUIView(_ button: UIButton, context: Context) {
+        // Same order as SongActionsMenuContent minus Play/Favorite/Details:
+        // [Instant Mix], divider, Play Next, Add to Queue, [divider, Add to
+        // Playlist], divider, Share. Grouping into .displayInline submenus gives
+        // the same separator lines as SwiftUI's Divider(), built from a plain
+        // array — no leading-conditional-item ambiguity possible here.
+        var groups: [[UIMenuElement]] = []
+        if showInstantMix {
+            groups.append([
+                action(String(localized: "instant_mix"), "sparkles", onInstantMix)
+            ])
+        }
+        groups.append([
+            action(String(localized: "play_next"), "text.insert", onPlayNext),
+            action(String(localized: "add_to_queue"), "text.badge.plus", onAddToQueue)
+        ])
+        if showAddToPlaylist {
+            groups.append([
+                action(String(localized: "add_to_playlist"), "music.note.list", onAddToPlaylist)
+            ])
+        }
+        groups.append([
+            action(String(localized: "share"), "square.and.arrow.up", onShare)
+        ])
+
+        button.menu = UIMenu(children: groups.map { UIMenu(options: .displayInline, children: $0) })
+    }
+
+    private func action(_ title: String, _ systemImage: String, _ handler: @escaping () -> Void) -> UIAction {
+        UIAction(title: title, image: UIImage(systemName: systemImage)) { _ in
+            handler()
+        }
     }
 }
 

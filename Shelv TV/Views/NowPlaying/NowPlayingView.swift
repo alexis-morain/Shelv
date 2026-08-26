@@ -24,8 +24,6 @@ struct NowPlayingView: View {
         return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
     }
 
-    @State private var displayTime: Double = 0
-    @State private var displayDuration: Double = 0
     @State private var panel: TVNowPlayingPanel?
     @State private var showSleepTimer = false
     @State private var showAddToPlaylist = false
@@ -69,14 +67,6 @@ struct NowPlayingView: View {
                             }
                         }
                         .animation(.easeInOut(duration: 0.25), value: panel)
-                        .onAppear { syncDisplayFromPlayer() }
-                        .onChange(of: scenePhase) { _, phase in
-                            if phase == .active { syncDisplayFromPlayer() }
-                        }
-                        .onReceive(player.timePublisher) { t in
-                            displayTime = t.time
-                            displayDuration = t.duration
-                        }
                     } else {
                         ContentUnavailableView(
                             String(localized: "nothing_playing"),
@@ -161,18 +151,7 @@ struct NowPlayingView: View {
                     }
                     .frame(maxWidth: 620, minHeight: 34)
                 } else {
-                    SeekBar(time: displayTime, duration: displayDuration, accent: accent) { target in
-                        displayTime = target
-                        player.seek(to: target)
-                    }
-                    HStack {
-                        Text(formatDuration(Int(displayTime))).monospacedDigit()
-                        Spacer()
-                        Text(formatDuration(Int(displayDuration))).monospacedDigit()
-                    }
-                    .frame(maxWidth: 620)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    TVPlayerProgressSection(accent: accent)
                 }
 
                 // Codec · Bitrate (gleiche Quelle/Logik wie iOS & macOS); bei Buffering „Loading".
@@ -364,13 +343,6 @@ struct NowPlayingView: View {
         panel = (panel == p) ? nil : p
     }
 
-    /// Anzeige-Zeit direkt aus dem (im Speicher gehaltenen) Player übernehmen — nötig wenn
-    /// pausiert: dann feuert der timePublisher nicht und die Anzeige bliebe sonst bei 0.
-    private func syncDisplayFromPlayer() {
-        displayTime = player.currentTime
-        displayDuration = player.duration
-    }
-
     private static let sleepTimerOptions = [15, 30, 45, 60, 90, 120]
 
     private func sleepTimerRowLabel(minutes: Int) -> String {
@@ -403,6 +375,55 @@ struct NowPlayingView: View {
             // Kein Kopf — die Sektionen (Als Nächstes / Nächste Titel / Deine Warteschlange) sind selbsterklärend.
             QueueView()
         }
+    }
+}
+
+/// Owns the playback position state and subscribes to `timePublisher` itself, so
+/// the ticking (many times per second during playback) only re-renders this small
+/// view instead of NowPlayingView's whole body. That body contains the "..." menu
+/// button, and re-rendering the hierarchy behind an open menu makes the system
+/// re-take its blurred backdrop snapshot, which is the flickering: it appeared
+/// only while playing (the publisher is silent when paused). Same fix as the iOS
+/// player's `PlayerProgressSection`.
+private struct TVPlayerProgressSection: View {
+    let accent: Color
+
+    @ObservedObject private var player = AudioPlayerService.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    @State private var displayTime: Double = 0
+    @State private var displayDuration: Double = 0
+
+    var body: some View {
+        Group {
+            SeekBar(time: displayTime, duration: displayDuration, accent: accent) { target in
+                displayTime = target
+                player.seek(to: target)
+            }
+            HStack {
+                Text(formatDuration(Int(displayTime))).monospacedDigit()
+                Spacer()
+                Text(formatDuration(Int(displayDuration))).monospacedDigit()
+            }
+            .frame(maxWidth: 620)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .onReceive(player.timePublisher) { t in
+            displayTime = t.time
+            displayDuration = t.duration
+        }
+        // Anzeige-Zeit direkt aus dem (im Speicher gehaltenen) Player übernehmen — nötig wenn
+        // pausiert: dann feuert der timePublisher nicht und die Anzeige bliebe sonst bei 0.
+        .onAppear { syncDisplayFromPlayer() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { syncDisplayFromPlayer() }
+        }
+    }
+
+    private func syncDisplayFromPlayer() {
+        displayTime = player.currentTime
+        displayDuration = player.duration
     }
 }
 
