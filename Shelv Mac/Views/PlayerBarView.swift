@@ -334,17 +334,23 @@ struct PlayerBarView: View {
                         } else {
                             HStack(spacing: 22) {
                                 Group {
-                                    if let song = player.currentSong {
-                                        Menu {
-                                            playerSongMenuItems(song)
+                                    if showFavoriteActions, let song = player.currentSong {
+                                        let isStarred = libraryStore.isSongStarred(song)
+                                        Button {
+                                            Task {
+                                                await libraryStore.toggleStarSong(song)
+                                                player.setCurrentSongStarred(!isStarred)
+                                            }
                                         } label: {
-                                            Image(systemName: "ellipsis.circle")
-                                                .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
+                                            Image(systemName: isStarred ? "heart.fill" : "heart")
+                                                .foregroundStyle(isStarred ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
                                         }
-                                        .menuStyle(.borderlessButton)
-                                        .fixedSize()
+                                        .buttonStyle(.plain)
+                                        .help(isStarred
+                                              ? String(localized: "remove_from_favorites")
+                                              : String(localized: "add_to_favorites"))
                                     } else {
-                                        Image(systemName: "ellipsis.circle")
+                                        Image(systemName: "heart")
                                             .hidden()
                                     }
                                 }
@@ -423,23 +429,15 @@ struct PlayerBarView: View {
                                 }
 
                                 Group {
-                                    if showFavoriteActions, let song = player.currentSong {
-                                        let isStarred = libraryStore.isSongStarred(song)
-                                        Button {
-                                            Task {
-                                                await libraryStore.toggleStarSong(song)
-                                                player.setCurrentSongStarred(!isStarred)
+                                    if let song = player.currentSong {
+                                        Image(systemName: "ellipsis.circle")
+                                            .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
+                                            .contentShape(Rectangle())
+                                            .overlay {
+                                                SongActionsNativeMenuTrigger(entries: songMenuEntries(song))
                                             }
-                                        } label: {
-                                            Image(systemName: isStarred ? "heart.fill" : "heart")
-                                                .foregroundStyle(isStarred ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help(isStarred
-                                              ? String(localized: "remove_from_favorites")
-                                              : String(localized: "add_to_favorites"))
                                     } else {
-                                        Image(systemName: "heart")
+                                        Image(systemName: "ellipsis.circle")
                                             .hidden()
                                     }
                                 }
@@ -560,29 +558,33 @@ struct PlayerBarView: View {
         }
     }
 
-    @ViewBuilder
-    private func playerSongMenuItems(_ song: Song) -> some View {
+    private func songMenuEntries(_ song: Song) -> [SongMenuEntry] {
+        var entries: [SongMenuEntry] = []
         if showInstantMixActions && !offlineMode.isOffline {
-            Button(String(localized: "instant_mix")) {
+            entries.append(.action(title: String(localized: "instant_mix"), systemImage: "sparkles") {
                 InstantMixService.playSongMix(for: song)
-            }
+            })
+            entries.append(.divider)
         }
-        Button(String(localized: "play_next")) {
+        entries.append(.action(title: String(localized: "play_next"), systemImage: "text.insert") {
             player.addPlayNext(song)
-        }
-        Button(String(localized: "add_to_queue")) {
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+        })
+        entries.append(.action(title: String(localized: "add_to_queue"), systemImage: "text.badge.plus") {
             player.addToQueue(song)
-        }
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+        })
         if showPlaylistActions {
-            Divider()
-            Button(String(localized: "add_to_playlist")) {
+            entries.append(.divider)
+            entries.append(.action(title: String(localized: "add_to_playlist"), systemImage: "music.note.list") {
                 NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
-            }
+            })
         }
-        Divider()
-        Button(String(localized: "share")) {
+        entries.append(.divider)
+        entries.append(.action(title: String(localized: "share"), systemImage: "square.and.arrow.up") {
             shareSong(song)
-        }
+        })
+        return entries
     }
 
     private func shareSong(_ song: Song) {
@@ -1017,6 +1019,86 @@ private struct SleepTimerNativeMenuTrigger: NSViewRepresentable {
         @objc private func selectSleepTimerOption(_ sender: NSMenuItem) {
             guard let minutes = sender.representedObject as? Int else { return }
             parent.onSelect(minutes)
+        }
+    }
+}
+
+private enum SongMenuEntry {
+    case action(title: String, systemImage: String, handler: () -> Void)
+    case divider
+}
+
+/// Native NSMenu popup instead of SwiftUI's `Menu` — a SwiftUI `Menu` with an
+/// icon-only label picks up a disclosure chevron and the system accent tint
+/// on macOS, which breaks parity with the plain icon buttons next to it. This
+/// keeps the "..." icon visually identical to them; only the click behavior
+/// (native popup menu) differs.
+private struct SongActionsNativeMenuTrigger: NSViewRepresentable {
+    let entries: [SongMenuEntry]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> TriggerView {
+        let view = TriggerView()
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateNSView(_ nsView: TriggerView, context: Context) {
+        context.coordinator.parent = self
+        nsView.coordinator = context.coordinator
+    }
+
+    final class TriggerView: NSView {
+        weak var coordinator: Coordinator?
+
+        override func mouseDown(with event: NSEvent) {
+            coordinator?.showMenu(from: self, with: event)
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            coordinator?.showMenu(from: self, with: event)
+        }
+    }
+
+    final class ActionBox {
+        let handler: () -> Void
+        init(_ handler: @escaping () -> Void) { self.handler = handler }
+    }
+
+    final class Coordinator: NSObject {
+        var parent: SongActionsNativeMenuTrigger
+
+        init(parent: SongActionsNativeMenuTrigger) {
+            self.parent = parent
+        }
+
+        /// Popped up the same way a right-click context menu is (via the triggering
+        /// event, not a hardcoded point) so AppKit flips it above the button when
+        /// there isn't room below — e.g. when the player bar sits at the bottom of
+        /// the window, matching how the album context menu already behaves.
+        func showMenu(from view: NSView, with event: NSEvent) {
+            let menu = NSMenu()
+            for entry in parent.entries {
+                switch entry {
+                case .divider:
+                    menu.addItem(.separator())
+                case .action(let title, let systemImage, let handler):
+                    let item = NSMenuItem(title: title, action: #selector(performAction(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
+                    item.representedObject = ActionBox(handler)
+                    menu.addItem(item)
+                }
+            }
+            menu.minimumWidth = 200
+            NSMenu.popUpContextMenu(menu, with: event, for: view)
+        }
+
+        @objc private func performAction(_ sender: NSMenuItem) {
+            (sender.representedObject as? ActionBox)?.handler()
         }
     }
 }
