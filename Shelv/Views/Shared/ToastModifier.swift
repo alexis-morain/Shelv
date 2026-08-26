@@ -63,7 +63,21 @@ private struct ToastViewModifier: ViewModifier {
         .background(t.isError ? Color.red : accentColor)
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .padding(.top, topPadding)
+        .padding(.top, resolvedTopPadding)
+    }
+
+    /// A negative `topPadding` lifts the banner over a navigation bar, but the
+    /// room for that is the safe area inset, which is far smaller on devices
+    /// without a notch and on iPad. Clamped so the banner always keeps 8pt to
+    /// the screen edge instead of being cut off there.
+    private var resolvedTopPadding: CGFloat {
+        guard topPadding < 0 else { return topPadding }
+        let safeTop = (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }?
+            .keyWindow?
+            .safeAreaInsets.top) ?? 0
+        return max(topPadding, 8 - safeTop)
     }
 }
 
