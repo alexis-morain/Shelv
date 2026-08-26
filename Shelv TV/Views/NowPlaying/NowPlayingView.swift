@@ -17,7 +17,6 @@ struct NowPlayingView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirectionTV") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
-    @Environment(\.scenePhase) private var scenePhase
     private var accent: Color { AppTheme.color(for: themeColor) }
     private var radioDisplayItems: [RadioStationDisplayItem] {
         let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
@@ -408,16 +407,19 @@ private struct TVPlayerProgressSection: View {
             .frame(maxWidth: 620)
             .font(.caption)
             .foregroundStyle(.secondary)
-        }
-        .onReceive(player.timePublisher) { t in
-            displayTime = t.time
-            displayDuration = t.duration
-        }
-        // Anzeige-Zeit direkt aus dem (im Speicher gehaltenen) Player übernehmen — nötig wenn
-        // pausiert: dann feuert der timePublisher nicht und die Anzeige bliebe sonst bei 0.
-        .onAppear { syncDisplayFromPlayer() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { syncDisplayFromPlayer() }
+            // Die Modifier hängen an dieser Zeile statt an der Group: Modifier auf
+            // einer Group werden auf jedes Kind einzeln angewendet, das würde
+            // doppelt abonnieren und den Zweck dieser eigenen View aushebeln.
+            .onReceive(player.timePublisher) { t in
+                displayTime = t.time
+                displayDuration = t.duration
+            }
+            // Anzeige-Zeit direkt aus dem (im Speicher gehaltenen) Player übernehmen — nötig wenn
+            // pausiert: dann feuert der timePublisher nicht und die Anzeige bliebe sonst bei 0.
+            .onAppear { syncDisplayFromPlayer() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { syncDisplayFromPlayer() }
+            }
         }
     }
 

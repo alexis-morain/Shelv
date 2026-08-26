@@ -318,8 +318,7 @@ final class CarPlayLibraryController {
         var remaining = CPListTemplate.maximumItemCount
         var pending = counts
         var allocation: [String: Int] = [:]
-        while !pending.isEmpty {
-            guard let (letter, count) = pending.min(by: { $0.value < $1.value }) else { break }
+        while let (letter, count) = pending.min(by: { $0.value < $1.value }) {
             let share = max(1, remaining / pending.count)
             let take = min(count, share)
             allocation[letter] = take

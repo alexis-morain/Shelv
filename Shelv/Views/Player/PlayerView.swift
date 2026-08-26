@@ -370,7 +370,13 @@ struct PlayerView: View {
                     // Sekundäre Buttons — Amperfy-Stil: grauer Kreis, .primary Icon
                     HStack {
                         if !player.isRadioPlayback, let song = player.currentSong {
-                            PlayerSongActionsMenu(song: song, size: ctrl, isPad: isPad, toast: $currentToast)
+                            PlayerSongActionsMenu(
+                                song: song,
+                                size: ctrl,
+                                isPad: isPad,
+                                colorScheme: colorScheme,
+                                toast: $currentToast
+                            )
                             Spacer()
                         }
 
@@ -910,15 +916,19 @@ private struct PlayerProgressSection: View {
                 Text(formatTime(displayDuration))
                     .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
             }
-        }
-        .onReceive(player.timePublisher) { update in
-            guard !isDragging, !player.isSeeking else { return }
-            displayTime = update.time
-            displayDuration = update.duration
-        }
-        .onAppear {
-            displayTime = player.currentTime
-            displayDuration = player.duration
+            // The subscription hangs off this row rather than the Group: modifiers
+            // on a Group are applied to each child, which would subscribe twice
+            // and defeat the point of splitting this view out. This row is
+            // unconditional, unlike the slider above it.
+            .onReceive(player.timePublisher) { update in
+                guard !isDragging, !player.isSeeking else { return }
+                displayTime = update.time
+                displayDuration = update.duration
+            }
+            .onAppear {
+                displayTime = player.currentTime
+                displayDuration = player.duration
+            }
         }
     }
 
@@ -964,6 +974,11 @@ private struct PlayerSongActionsMenu: View {
     let song: Song
     let size: CGFloat
     let isPad: Bool
+    /// The real system scheme, passed in rather than read from the environment:
+    /// the player forces `.dark` on its whole body for the artwork gradient, so
+    /// reading it here would always yield dark and the sheet below would ignore
+    /// Light Mode, unlike every other sheet presented from the player.
+    let colorScheme: ColorScheme
 
     @ObservedObject private var libraryStore = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
@@ -990,6 +1005,7 @@ private struct PlayerSongActionsMenu: View {
             .contentShape(Rectangle())
             .overlay {
                 PlayerSongActionsMenuTrigger(
+                    size: size,
                     showInstantMix: showInstantMixActions && !offlineMode.isOffline,
                     showAddToPlaylist: showPlaylistActions && !offlineMode.isOffline,
                     onInstantMix: {
@@ -1016,6 +1032,7 @@ private struct PlayerSongActionsMenu: View {
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistSheet(songIds: [song.id])
                 .environmentObject(libraryStore)
+                .environment(\.colorScheme, colorScheme)
                 .tint(accentColor)
         }
         .sheet(item: $shareURL) { wrapped in
@@ -1047,6 +1064,7 @@ private struct PlayerSongActionsMenu: View {
 /// configuration, so UIKit has nothing to render and can't show a selected-state
 /// badge over the icon. The visible "..." is a SwiftUI Image underneath it.
 private struct PlayerSongActionsMenuTrigger: UIViewRepresentable {
+    let size: CGFloat
     let showInstantMix: Bool
     let showAddToPlaylist: Bool
     let onInstantMix: () -> Void
@@ -1072,7 +1090,17 @@ private struct PlayerSongActionsMenuTrigger: UIViewRepresentable {
         // switch that turns it off, and it has no SwiftUI `Menu` equivalent —
         // which is exactly why this needs to be a UIKit button.
         button.preferredMenuElementOrder = .fixed
+        // The button draws nothing, so VoiceOver would otherwise announce an
+        // unlabeled button where the "..." is.
+        button.accessibilityLabel = String(localized: "more_actions")
         return button
+    }
+
+    // A content-less UIButton reports no useful intrinsic size, so without this
+    // SwiftUI would not stretch it across the icon and taps near the edge of the
+    // visible button would miss.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        CGSize(width: size, height: size)
     }
 
     func updateUIView(_ button: UIButton, context: Context) {
