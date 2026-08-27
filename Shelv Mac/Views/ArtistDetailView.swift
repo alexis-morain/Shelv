@@ -855,8 +855,16 @@ class ArtistDetailViewModel: ObservableObject {
     func playAll(player: AudioPlayerService, albums: [Album], shuffle: Bool) async {
         var songs = await fetchSongs(albums: albums)
         guard !songs.isEmpty else { return }
-        if songs.count > maxSongs { songs = Array(songs.shuffled().prefix(maxSongs)) }
-        if shuffle { player.playShuffled(songs: songs) } else { player.play(songs: songs) }
+        if shuffle {
+            // Shuffling already discards the order, so sample at random.
+            if songs.count > maxSongs { songs = Array(songs.shuffled().prefix(maxSongs)) }
+            player.playShuffled(songs: songs)
+        } else {
+            songs = ArtistPlayOrder.songs(topSongs: topSongs, discography: songs)
+            // Trim from the end so the top songs survive the cap.
+            if songs.count > maxSongs { songs = Array(songs.prefix(maxSongs)) }
+            player.play(songs: songs)
+        }
     }
 }
 

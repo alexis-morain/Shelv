@@ -184,7 +184,10 @@ struct ArtistDetailView: View {
             Text(artistSubtitle)
                 .font(.callout).foregroundStyle(.secondary)
             HStack(spacing: 20) {
-                Button { player.play(songs: songs, startIndex: 0) } label: {
+                Button {
+                    let ordered = ArtistPlayOrder.songs(topSongs: topSongs, discography: songs)
+                    player.play(songs: ordered, startIndex: 0)
+                } label: {
                     Label(String(localized: "play"), systemImage: "play.fill")
                 }
                 .disabled(songs.isEmpty)
