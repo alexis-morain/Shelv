@@ -40,6 +40,33 @@ struct LibraryViewToggleButton: View {
     }
 }
 
+/// A single Shuffle button, for screens whose content has no meaningful order to
+/// play straight through.
+struct LibraryShuffleButton: View {
+    let isLoading: Bool
+    let isDisabled: Bool
+    let accentColor: Color
+    let onShuffle: () -> Void
+
+    var body: some View {
+        Button(action: onShuffle) {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(accentColor)
+                } else {
+                    Image(systemName: "shuffle")
+                        .foregroundStyle(accentColor)
+                }
+            }
+            .frame(width: 18, height: 18)
+        }
+        .disabled(isDisabled || isLoading)
+        .accessibilityLabel(String(localized: "shuffle"))
+    }
+}
+
 struct LibraryPlaybackMenu: View {
     let isLoading: Bool
     let isDisabled: Bool

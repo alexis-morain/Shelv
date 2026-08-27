@@ -51,22 +51,25 @@ struct QueueView: View {
                         .padding(.horizontal, 36)
                         .padding(.top, 20)
                 } else {
+                    // IndexedSongOccurrence instead of `song.id`: the same song can
+                    // sit in the queue more than once, and a duplicate ForEach id
+                    // makes SwiftUI drop the row and leave an empty gap.
                     if !player.playNextQueue.isEmpty {
                         sectionHeader(String(localized: "play_next"), player.playNextQueue.count)
-                        ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { i, song in
-                            row(song) { player.jumpToPlayNext(at: i) }
+                        ForEach(IndexedSongOccurrence.rows(for: player.playNextQueue)) { entry in
+                            row(entry.song) { player.jumpToPlayNext(at: entry.index) }
                         }
                     }
                     if !upcomingAlbum.isEmpty {
                         sectionHeader(String(localized: "up_next"), upcomingAlbum.count)
-                        ForEach(Array(upcomingAlbum.enumerated()), id: \.element.id) { i, song in
-                            row(song) { player.jumpToQueueTrack(at: player.currentIndex + 1 + i) }
+                        ForEach(IndexedSongOccurrence.rows(for: upcomingAlbum)) { entry in
+                            row(entry.song) { player.jumpToQueueTrack(at: player.currentIndex + 1 + entry.index) }
                         }
                     }
                     if !player.userQueue.isEmpty {
                         sectionHeader(String(localized: "your_queue"), player.userQueue.count)
-                        ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { i, song in
-                            row(song) { player.jumpToUserQueue(at: i) }
+                        ForEach(IndexedSongOccurrence.rows(for: player.userQueue)) { entry in
+                            row(entry.song) { player.jumpToUserQueue(at: entry.index) }
                         }
                     }
                 }

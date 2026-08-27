@@ -74,6 +74,7 @@ struct LibraryView: View {
 
                 if segment == 0 { albumControls }
                 else if segment == 1 { artistControls }
+                else if segment == 2 { favoritesControls }
 
                 // Eigene Fokus-Sektion → von Picker/Steuerung springt „runter" zuverlässig
                 // in die Liste, auch wenn kein Element direkt darunter sitzt (z. B. Favoriten).
@@ -225,6 +226,52 @@ struct LibraryView: View {
             } else {
                 player.play(songs: songs, startIndex: 0)
             }
+        }
+    }
+
+    /// Shuffles the favorite songs together with every track of the favorite
+    /// albums. Favorite artists are left out on purpose: a single artist can add
+    /// hundreds of tracks and needs its whole discography fetched first.
+    private func prepareFavoritesForPlayback() {
+        let albums = store.favoriteAlbums
+        let songs = store.favoriteSongs
+        guard !albums.isEmpty || !songs.isEmpty else { return }
+
+        playbackTask?.cancel()
+        isPreparingPlayback = true
+
+        let api = SubsonicAPIService.shared
+        let serverID = api.activeServer?.id
+        let player = self.player
+
+        playbackTask = Task { @MainActor in
+            var collected: [Song] = []
+            var seen = Set<String>()
+            for song in songs where seen.insert(song.id).inserted {
+                collected.append(song)
+            }
+            for album in albums {
+                let albumSongs: [Song]
+                if let known = album.songs {
+                    albumSongs = known
+                } else {
+                    albumSongs = (try? await api.getAlbum(id: album.id, retries: 1).song) ?? []
+                }
+                for song in albumSongs where seen.insert(song.id).inserted {
+                    collected.append(song)
+                }
+            }
+
+            guard !Task.isCancelled, api.activeServer?.id == serverID else {
+                isPreparingPlayback = false
+                return
+            }
+
+            isPreparingPlayback = false
+            playbackTask = nil
+
+            guard !collected.isEmpty else { return }
+            player.playShuffled(songs: collected)
         }
     }
 
@@ -439,9 +486,53 @@ struct LibraryView: View {
     // MARK: - Favoriten
 
     @ViewBuilder
+    private var hasNoFavoritePlayback: Bool {
+        store.favoriteAlbums.isEmpty && store.favoriteSongs.isEmpty
+    }
+
+    /// Shuffle only: favorites have no meaningful order of their own, and playing
+    /// them straight through would alternate a single track with a whole album.
+    private var favoritesControls: some View {
+        HStack(spacing: 24) {
+            Button {
+                prepareFavoritesForPlayback()
+            } label: {
+                Label {
+                    Text(String(localized: "shuffle"))
+                } icon: {
+                    if isPreparingPlayback {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "shuffle")
+                    }
+                }
+            }
+            .disabled(hasNoFavoritePlayback || isPreparingPlayback)
+        }
+        .buttonStyle(.bordered)
+        .padding(.bottom, 16)
+        .focusSection()
+    }
+
     private var favoritesList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                if !store.favoriteSongs.isEmpty {
+                    Text(String(localized: "songs")).font(.title3).bold().padding(.horizontal, 50)
+                    LazyVStack(spacing: 4) {
+                        favoriteSongRows(Array(store.favoriteSongs.prefix(FavoritePresentation.previewLimit)))
+                    }
+                    // Same inset as the section headers and the card rows, so the
+                    // song rows line up with the covers instead of starting further left.
+                    .padding(.horizontal, 50)
+                    .focusSection()
+                    if store.favoriteSongs.count > FavoritePresentation.previewLimit {
+                        showAllFavoritesLink(count: store.favoriteSongs.count) {
+                            favoriteSongsPage
+                        }
+                    }
+                }
+
                 if !store.favoriteAlbums.isEmpty {
                     Text(String(localized: "albums")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow {
@@ -453,19 +544,6 @@ struct LibraryView: View {
                     if store.favoriteAlbums.count > FavoritePresentation.previewLimit {
                         showAllFavoritesLink(count: store.favoriteAlbums.count) {
                             favoriteAlbumsPage
-                        }
-                    }
-                }
-
-                if !store.favoriteSongs.isEmpty {
-                    Text(String(localized: "songs")).font(.title3).bold().padding(.horizontal, 50)
-                    LazyVStack(spacing: 4) {
-                        favoriteSongRows(Array(store.favoriteSongs.prefix(FavoritePresentation.previewLimit)))
-                    }
-                    .focusSection()
-                    if store.favoriteSongs.count > FavoritePresentation.previewLimit {
-                        showAllFavoritesLink(count: store.favoriteSongs.count) {
-                            favoriteSongsPage
                         }
                     }
                 }
@@ -538,6 +616,7 @@ struct LibraryView: View {
             LazyVStack(spacing: 4) {
                 favoriteSongRows(store.favoriteSongs)
             }
+            .padding(.horizontal, 50)
             .padding(.vertical, 24)
         }
         .navigationTitle(String(localized: "favorite_songs"))

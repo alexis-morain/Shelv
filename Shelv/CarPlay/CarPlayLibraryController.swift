@@ -282,14 +282,13 @@ final class CarPlayLibraryController {
             firstSortLetter($0.name, sortName: $0.sortName)
         }
         let letters = grouped.keys.sorted()
-        var remainingItems = CPListTemplate.maximumItemCount
+        let allocation = letterAllocation(for: grouped, totalCount: sorted.count)
         var itemsByCoverId: [String: [CPListItem]] = [:]
         var orderedCoverArtIds: [String] = []
         var sections: [CPListSection] = []
-        for (letterIndex, letter) in letters.enumerated() {
-            guard remainingItems > 0 else { break }
-            let remainingLetters = max(1, letters.count - letterIndex)
-            let cap = max(1, remainingItems / remainingLetters)
+        for letter in letters {
+            let cap = allocation[letter] ?? 0
+            guard cap > 0 else { continue }
             var letterItems: [CPListItem] = []
             for album in (grouped[letter] ?? []).prefix(cap) {
                 let item = albumListItem(album) { [weak self] _, c in
@@ -301,10 +300,32 @@ final class CarPlayLibraryController {
                 registerCoverItem(item, coverArtId: album.coverArt, itemsByCoverId: &itemsByCoverId, orderedCoverArtIds: &orderedCoverArtIds)
                 letterItems.append(item)
             }
-            remainingItems -= letterItems.count
             sections.append(CPListSection(items: letterItems, header: letter, sectionIndexTitle: letter))
         }
         return CarPlaySectionBuild(sections: sections, itemsByCoverId: itemsByCoverId, orderedCoverArtIds: orderedCoverArtIds)
+    }
+
+    /// Per-letter item cap within `CPListTemplate.maximumItemCount`. Splitting the budget
+    /// evenly across every remaining letter (regardless of actual demand) truncated dense
+    /// letters like "B" while lighter letters never used their share — e.g. a downloaded
+    /// artist could vanish from the list well before the alphabet, and total budget was
+    /// often way under the limit in the first place. This instead satisfies sparse letters
+    /// first (water-filling), so their unused share carries forward to letters that need it,
+    /// and skips capping entirely once total demand already fits the budget.
+    private func letterAllocation<T>(for grouped: [String: [T]], totalCount: Int) -> [String: Int] {
+        let counts = grouped.mapValues(\.count)
+        guard totalCount > CPListTemplate.maximumItemCount else { return counts }
+        var remaining = CPListTemplate.maximumItemCount
+        var pending = counts
+        var allocation: [String: Int] = [:]
+        while let (letter, count) = pending.min(by: { $0.value < $1.value }) {
+            let share = max(1, remaining / pending.count)
+            let take = min(count, share)
+            allocation[letter] = take
+            remaining -= take
+            pending.removeValue(forKey: letter)
+        }
+        return allocation
     }
 
     private func albumSource() -> [Album] {
@@ -377,14 +398,13 @@ final class CarPlayLibraryController {
             firstSortLetter($0.name, sortName: $0.sortName)
         }
         let letters = grouped.keys.sorted()
-        var remainingItems = CPListTemplate.maximumItemCount
+        let allocation = letterAllocation(for: grouped, totalCount: sorted.count)
         var itemsByCoverId: [String: [CPListItem]] = [:]
         var orderedCoverArtIds: [String] = []
         var sections: [CPListSection] = []
-        for (letterIndex, letter) in letters.enumerated() {
-            guard remainingItems > 0 else { break }
-            let remainingLetters = max(1, letters.count - letterIndex)
-            let cap = max(1, remainingItems / remainingLetters)
+        for letter in letters {
+            let cap = allocation[letter] ?? 0
+            guard cap > 0 else { continue }
             var letterItems: [CPListItem] = []
             for artist in (grouped[letter] ?? []).prefix(cap) {
                 let count = counts[artist.id] ?? 0
@@ -397,7 +417,6 @@ final class CarPlayLibraryController {
                 registerCoverItem(item, coverArtId: artist.coverArt, itemsByCoverId: &itemsByCoverId, orderedCoverArtIds: &orderedCoverArtIds)
                 letterItems.append(item)
             }
-            remainingItems -= letterItems.count
             sections.append(CPListSection(items: letterItems, header: letter, sectionIndexTitle: letter))
         }
         return CarPlaySectionBuild(sections: sections, itemsByCoverId: itemsByCoverId, orderedCoverArtIds: orderedCoverArtIds)
