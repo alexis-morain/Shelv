@@ -518,7 +518,6 @@ struct TrackRow: View {
         UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
     }
     @State private var isHovered = false
-    @State private var waveformPulse = false
     @State private var shareURL: URL?
     @State private var shareErrorMessage: String?
 
@@ -526,12 +525,13 @@ struct TrackRow: View {
         HStack(spacing: 0) {
             Group {
                 if isPlaying {
+                    // Bewusst ohne Animation: eine repeatForever-Opacity liess SwiftUI
+                    // bei jedem Bildschirmbild durch den Viewbaum des ganzen Fensters
+                    // laufen und kostete zweistellige CPU-Last, solange die laufende
+                    // Zeile sichtbar war. symbolEffect war auf macOS ebenfalls zu teuer,
+                    // anders als auf iOS (siehe NowPlayingIndicator).
                     Image(systemName: "waveform")
                         .foregroundStyle(themeColor)
-                        .opacity(waveformPulse ? 1.0 : 0.3)
-                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: waveformPulse)
-                        .onAppear { waveformPulse = true }
-                        .onDisappear { waveformPulse = false }
                 } else {
                     Text(song.displayTrack)
                         .foregroundStyle(.tertiary)

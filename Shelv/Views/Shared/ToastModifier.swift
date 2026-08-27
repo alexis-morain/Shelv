@@ -7,6 +7,10 @@ struct ShelveToast: Equatable {
 
 private struct ToastViewModifier: ViewModifier {
     @Binding var toast: ShelveToast?
+    /// Distance from the host view's top edge. Negative values lift the banner
+    /// above it, for screens like the player whose content starts below a
+    /// navigation bar.
+    let topPadding: CGFloat
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @State private var isVisible = false
@@ -59,12 +63,26 @@ private struct ToastViewModifier: ViewModifier {
         .background(t.isError ? Color.red : accentColor)
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .padding(.top, 8)
+        .padding(.top, resolvedTopPadding)
+    }
+
+    /// A negative `topPadding` lifts the banner over a navigation bar, but the
+    /// room for that is the safe area inset, which is far smaller on devices
+    /// without a notch and on iPad. Clamped so the banner always keeps 8pt to
+    /// the screen edge instead of being cut off there.
+    private var resolvedTopPadding: CGFloat {
+        guard topPadding < 0 else { return topPadding }
+        let safeTop = (UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }?
+            .keyWindow?
+            .safeAreaInsets.top) ?? 0
+        return max(topPadding, 8 - safeTop)
     }
 }
 
 extension View {
-    func shelveToast(_ toast: Binding<ShelveToast?>) -> some View {
-        modifier(ToastViewModifier(toast: toast))
+    func shelveToast(_ toast: Binding<ShelveToast?>, topPadding: CGFloat = 8) -> some View {
+        modifier(ToastViewModifier(toast: toast, topPadding: topPadding))
     }
 }

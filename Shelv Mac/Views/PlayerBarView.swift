@@ -183,6 +183,7 @@ struct PlayerBarView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var radioStore = RadioStationStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
 
     private var audioBadge: String? {
         player.actualStreamFormat?.displayString
@@ -190,9 +191,10 @@ struct PlayerBarView: View {
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirectionMac") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
-    @State private var isDragging: Bool = false
-    @State private var dragValue: Double = 0
+    @State private var shareURL: URL?
+    @State private var shareErrorMessage: String?
 
     private var showFavoriteActions: Bool {
         personalizationVisibility.showFavoriteActions
@@ -201,10 +203,6 @@ struct PlayerBarView: View {
     private var showPlaylistActions: Bool {
         personalizationVisibility.showPlaylistActions
     }
-    // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
-    // timePublisher gespeist. Ohne das friert die Anzeige ein (z.B. nach einem Seek),
-    // obwohl der Ton normal weiterläuft.
-    @State private var displayTime: Double = 0
     @State private var lastAudibleVolume: Float = 0.7
     @State private var isSleepTimerMenuPresented: Bool = false
 
@@ -330,17 +328,23 @@ struct PlayerBarView: View {
                         } else {
                             HStack(spacing: 22) {
                                 Group {
-                                    if showPlaylistActions, let song = player.currentSong {
+                                    if showFavoriteActions, let song = player.currentSong {
+                                        let isStarred = libraryStore.isSongStarred(song)
                                         Button {
-                                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                            Task {
+                                                await libraryStore.toggleStarSong(song)
+                                                player.setCurrentSongStarred(!isStarred)
+                                            }
                                         } label: {
-                                            Image(systemName: "music.note.list")
-                                                .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
+                                            Image(systemName: isStarred ? "heart.fill" : "heart")
+                                                .foregroundStyle(isStarred ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
                                         }
                                         .buttonStyle(.plain)
-                                        .help(String(localized: "add_to_playlist"))
+                                        .help(isStarred
+                                              ? String(localized: "remove_from_favorites")
+                                              : String(localized: "add_to_favorites"))
                                     } else {
-                                        Image(systemName: "music.note.list")
+                                        Image(systemName: "heart")
                                             .hidden()
                                     }
                                 }
@@ -419,23 +423,15 @@ struct PlayerBarView: View {
                                 }
 
                                 Group {
-                                    if showFavoriteActions, let song = player.currentSong {
-                                        let isStarred = libraryStore.isSongStarred(song)
-                                        Button {
-                                            Task {
-                                                await libraryStore.toggleStarSong(song)
-                                                player.setCurrentSongStarred(!isStarred)
+                                    if let song = player.currentSong {
+                                        Image(systemName: "ellipsis.circle")
+                                            .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
+                                            .contentShape(Rectangle())
+                                            .overlay {
+                                                SongActionsNativeMenuTrigger(entries: songMenuEntries(song))
                                             }
-                                        } label: {
-                                            Image(systemName: isStarred ? "heart.fill" : "heart")
-                                                .foregroundStyle(isStarred ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help(isStarred
-                                              ? String(localized: "remove_from_favorites")
-                                              : String(localized: "add_to_favorites"))
                                     } else {
-                                        Image(systemName: "heart")
+                                        Image(systemName: "ellipsis.circle")
                                             .hidden()
                                     }
                                 }
@@ -449,21 +445,10 @@ struct PlayerBarView: View {
                         if player.isRadioPlayback {
                             liveStatusView
                         } else {
-                            HStack(spacing: 10) {
-                                Text(formatTime(isDragging ? dragValue : displayTime))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                                    .frame(width: 42, alignment: .trailing)
-
-                                playbackProgressControl
-
-                                Text(formatTime(player.duration))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                                    .frame(width: 42, alignment: .leading)
-                            }
+                            MacPlayerProgressRow(
+                                usesNativeInterface: usesNativeInterface,
+                                accentColor: themeColor
+                            )
                         }
                     }
                     .frame(height: Self.progressRowHeight)
@@ -532,46 +517,65 @@ struct PlayerBarView: View {
             .frame(height: 100)
         }
         .background(.bar)
-        .onReceive(player.timePublisher) { update in
-            guard !isDragging else { return }
-            displayTime = update.time
-        }
         .onAppear {
-            displayTime = player.currentTime
             rememberAudibleVolume(player.volume)
         }
-        .onChange(of: player.currentSong?.id ?? player.currentRadioStation?.id) { _, _ in displayTime = player.currentTime }
         .onChange(of: player.volume) { _, newVolume in
             rememberAudibleVolume(newVolume)
         }
+        .sharingServicePicker(url: $shareURL)
+        .alert(
+            String(localized: "error"),
+            isPresented: Binding(get: { shareErrorMessage != nil }, set: { if !$0 { shareErrorMessage = nil } }),
+            presenting: shareErrorMessage
+        ) { _ in
+            Button(String(localized: "ok")) {}
+        } message: { message in
+            Text(message)
+        }
     }
 
-    @ViewBuilder
-    private var playbackProgressControl: some View {
-        if usesNativeInterface {
-            NativeMacLinearSlider(
-                value: progressBinding,
-                bounds: 0...max(player.duration, 1),
-                trackColor: Color.primary.opacity(0.16),
-                fillColor: Color.primary.opacity(0.86),
-                accessibilityLabel: String(localized: "playback_position"),
-                idleHeight: 5,
-                activeHeight: 10,
-                isEnabled: player.currentSong != nil && player.duration > 0,
-                interaction: .jumpWithGrabSafety,
-                grabRadius: 10,
-                layoutHeight: Self.nativePlaybackSliderHeight,
-                onEditingChanged: handleSeekEditing
-            )
-            .frame(maxWidth: 360)
-        } else {
-            Slider(
-                value: progressBinding,
-                in: 0...max(player.duration, 1),
-                onEditingChanged: handleSeekEditing
-            )
-            .frame(maxWidth: 360)
-            .disabled(player.currentSong == nil || player.duration <= 0)
+    private func songMenuEntries(_ song: Song) -> [SongMenuEntry] {
+        var entries: [SongMenuEntry] = []
+        if showInstantMixActions && !offlineMode.isOffline {
+            entries.append(.action(title: String(localized: "instant_mix"), systemImage: "sparkles") {
+                InstantMixService.playSongMix(for: song)
+            })
+            entries.append(.divider)
+        }
+        entries.append(.action(title: String(localized: "play_next"), systemImage: "text.insert") {
+            player.addPlayNext(song)
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+        })
+        entries.append(.action(title: String(localized: "add_to_queue"), systemImage: "text.badge.plus") {
+            player.addToQueue(song)
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+        })
+        if showPlaylistActions {
+            entries.append(.divider)
+            entries.append(.action(title: String(localized: "add_to_playlist"), systemImage: "music.note.list") {
+                NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+            })
+        }
+        entries.append(.divider)
+        entries.append(.action(title: String(localized: "share"), systemImage: "square.and.arrow.up") {
+            shareSong(song)
+        })
+        return entries
+    }
+
+    private func shareSong(_ song: Song) {
+        Task {
+            do {
+                let share = try await SubsonicAPIService.shared.createShare(id: song.id)
+                guard let url = URL(string: share.url) else {
+                    await MainActor.run { shareErrorMessage = String(localized: "share_link_failed") }
+                    return
+                }
+                await MainActor.run { shareURL = url }
+            } catch {
+                await MainActor.run { shareErrorMessage = error.localizedDescription }
+            }
         }
     }
 
@@ -708,24 +712,6 @@ struct PlayerBarView: View {
         )
     }
 
-    private var progressBinding: Binding<Double> {
-        Binding(
-            get: { isDragging ? dragValue : displayTime },
-            set: { dragValue = $0 }
-        )
-    }
-
-    private func handleSeekEditing(_ editing: Bool) {
-        if editing {
-            isDragging = true
-            dragValue = displayTime
-        } else {
-            player.seek(to: dragValue)
-            displayTime = dragValue
-            isDragging = false
-        }
-    }
-
     private var volumeSystemImage: String {
         if player.volume < 0.01 {
             return "speaker.slash.fill"
@@ -766,7 +752,6 @@ struct PlayerBarView: View {
     private static let progressRowHeight: CGFloat = 22
     private static let centerStackSpacing: CGFloat = 8
     private static let centerStackHeight = transportControlsHeight + centerStackSpacing + progressRowHeight
-    private static let nativePlaybackSliderHeight: CGFloat = 20
     private static let sleepTimerOptions = [15, 30, 45, 60, 90, 120]
 
     private func sleepTimerRowLabel(minutes: Int) -> String {
@@ -791,13 +776,104 @@ struct PlayerBarView: View {
         return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 
+}
+
+/// Owns the playback position and subscribes to `timePublisher` itself. It ticks
+/// several times a second while playing, and hosting that on PlayerBarView meant
+/// the whole bar (artwork, titles, every button and slider) was rebuilt each
+/// time. Same split as the iOS and tvOS players.
+private struct MacPlayerProgressRow: View {
+    let usesNativeInterface: Bool
+    let accentColor: Color
+
+    @ObservedObject private var player = AudioPlayerService.shared
+
+    @State private var displayTime: Double = 0
+    @State private var isDragging = false
+    @State private var dragValue: Double = 0
+
+    private var progressBinding: Binding<Double> {
+        Binding(
+            get: { isDragging ? dragValue : displayTime },
+            set: { dragValue = $0 }
+        )
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(formatTime(isDragging ? dragValue : displayTime))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 42, alignment: .trailing)
+
+            playbackProgressControl
+
+            Text(formatTime(player.duration))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 42, alignment: .leading)
+        }
+        // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
+        // timePublisher gespeist. Ohne das friert die Anzeige ein (z.B. nach einem Seek),
+        // obwohl der Ton normal weiterläuft.
+        .onReceive(player.timePublisher) { update in
+            guard !isDragging else { return }
+            displayTime = update.time
+        }
+        .onAppear { displayTime = player.currentTime }
+        .onChange(of: player.currentSong?.id ?? player.currentRadioStation?.id) { _, _ in
+            displayTime = player.currentTime
+        }
+    }
+
+    @ViewBuilder
+    private var playbackProgressControl: some View {
+        if usesNativeInterface {
+            NativeMacLinearSlider(
+                value: progressBinding,
+                bounds: 0...max(player.duration, 1),
+                trackColor: Color.primary.opacity(0.16),
+                fillColor: Color.primary.opacity(0.86),
+                accessibilityLabel: String(localized: "playback_position"),
+                idleHeight: 5,
+                activeHeight: 10,
+                isEnabled: player.currentSong != nil && player.duration > 0,
+                interaction: .jumpWithGrabSafety,
+                grabRadius: 10,
+                layoutHeight: 20,
+                onEditingChanged: handleSeekEditing
+            )
+            .frame(maxWidth: 360)
+        } else {
+            Slider(
+                value: progressBinding,
+                in: 0...max(player.duration, 1),
+                onEditingChanged: handleSeekEditing
+            )
+            .frame(maxWidth: 360)
+            .disabled(player.currentSong == nil || player.duration <= 0)
+        }
+    }
+
+    private func handleSeekEditing(_ editing: Bool) {
+        if editing {
+            isDragging = true
+            dragValue = displayTime
+        } else {
+            player.seek(to: dragValue)
+            displayTime = dragValue
+            isDragging = false
+        }
+    }
+
     private func formatTime(_ seconds: Double) -> String {
         guard seconds.isFinite && seconds >= 0 else { return "0:00" }
         let m = Int(seconds) / 60
         let s = Int(seconds) % 60
         return String(format: "%d:%02d", m, s)
     }
-
 }
 
 private struct MacPlayPauseButtonLabel: View {
@@ -963,6 +1039,86 @@ private struct SleepTimerNativeMenuTrigger: NSViewRepresentable {
         @objc private func selectSleepTimerOption(_ sender: NSMenuItem) {
             guard let minutes = sender.representedObject as? Int else { return }
             parent.onSelect(minutes)
+        }
+    }
+}
+
+private enum SongMenuEntry {
+    case action(title: String, systemImage: String, handler: () -> Void)
+    case divider
+}
+
+/// Native NSMenu popup instead of SwiftUI's `Menu` — a SwiftUI `Menu` with an
+/// icon-only label picks up a disclosure chevron and the system accent tint
+/// on macOS, which breaks parity with the plain icon buttons next to it. This
+/// keeps the "..." icon visually identical to them; only the click behavior
+/// (native popup menu) differs.
+private struct SongActionsNativeMenuTrigger: NSViewRepresentable {
+    let entries: [SongMenuEntry]
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeNSView(context: Context) -> TriggerView {
+        let view = TriggerView()
+        view.coordinator = context.coordinator
+        return view
+    }
+
+    func updateNSView(_ nsView: TriggerView, context: Context) {
+        context.coordinator.parent = self
+        nsView.coordinator = context.coordinator
+    }
+
+    final class TriggerView: NSView {
+        weak var coordinator: Coordinator?
+
+        override func mouseDown(with event: NSEvent) {
+            coordinator?.showMenu(from: self, with: event)
+        }
+
+        override func rightMouseDown(with event: NSEvent) {
+            coordinator?.showMenu(from: self, with: event)
+        }
+    }
+
+    final class ActionBox {
+        let handler: () -> Void
+        init(_ handler: @escaping () -> Void) { self.handler = handler }
+    }
+
+    final class Coordinator: NSObject {
+        var parent: SongActionsNativeMenuTrigger
+
+        init(parent: SongActionsNativeMenuTrigger) {
+            self.parent = parent
+        }
+
+        /// Popped up the same way a right-click context menu is (via the triggering
+        /// event, not a hardcoded point) so AppKit flips it above the button when
+        /// there isn't room below — e.g. when the player bar sits at the bottom of
+        /// the window, matching how the album context menu already behaves.
+        func showMenu(from view: NSView, with event: NSEvent) {
+            let menu = NSMenu()
+            for entry in parent.entries {
+                switch entry {
+                case .divider:
+                    menu.addItem(.separator())
+                case .action(let title, let systemImage, let handler):
+                    let item = NSMenuItem(title: title, action: #selector(performAction(_:)), keyEquivalent: "")
+                    item.target = self
+                    item.image = NSImage(systemSymbolName: systemImage, accessibilityDescription: nil)
+                    item.representedObject = ActionBox(handler)
+                    menu.addItem(item)
+                }
+            }
+            menu.minimumWidth = 200
+            NSMenu.popUpContextMenu(menu, with: event, for: view)
+        }
+
+        @objc private func performAction(_ sender: NSMenuItem) {
+            (sender.representedObject as? ActionBox)?.handler()
         }
     }
 }
