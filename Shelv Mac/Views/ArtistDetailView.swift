@@ -190,6 +190,11 @@ struct ArtistDetailView: View {
                                 }
                                 .padding(.horizontal, 20)
 
+                                if isGrid, let latestRelease {
+                                    // The card pads itself (24pt), so none here.
+                                    ArtistLatestReleaseCard(album: latestRelease, accentColor: themeColor)
+                                }
+
                                 HStack(spacing: 8) {
                                     Picker(String(localized: "sort"), selection: $sortRaw) {
                                         ForEach(LibrarySortOption.allCases.filter {
@@ -225,9 +230,6 @@ struct ArtistDetailView: View {
 
                             if isGrid && searchQuery.isEmpty {
                                 VStack(alignment: .leading, spacing: 24) {
-                                    if let latestRelease {
-                                        ArtistLatestReleaseCard(album: latestRelease, accentColor: themeColor)
-                                    }
                                     if !albumsOnly.isEmpty {
                                         ArtistReleaseShelf(
                                             title: String(localized: "albums"),
