@@ -111,7 +111,6 @@ struct SearchSongRow: View {
         UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
     }
     @State private var isHovered = false
-    @State private var waveformPulse = false
     @State private var shareURL: URL?
     @State private var shareErrorMessage: String?
 
@@ -120,12 +119,9 @@ struct SearchSongRow: View {
             if let rank {
                 Group {
                     if isPlaying {
+                        // Bewusst ohne Animation, siehe TrackRow in AlbumDetailView.
                         Image(systemName: "waveform")
                             .foregroundStyle(themeColor)
-                            .opacity(waveformPulse ? 1.0 : 0.3)
-                            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: waveformPulse)
-                            .onAppear { waveformPulse = true }
-                            .onDisappear { waveformPulse = false }
                     } else {
                         Text("\(rank)")
                             .foregroundStyle(.secondary)
