@@ -34,6 +34,7 @@ struct ArtistDetailView: View {
     @State private var isLoadingSearchSongs = false
     @State private var loadedSongSearchSourceID: String?
     @State private var topSongsFirstVisible = 0
+    @State private var isShowingArtwork = false
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
@@ -143,8 +144,22 @@ struct ArtistDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         HStack(alignment: .top, spacing: 24) {
-                            CoverArtView(url: coverURL, size: 120, isCircle: true)
-                                .shadow(color: .black.opacity(0.2), radius: 10)
+                            Button {
+                                isShowingArtwork = true
+                            } label: {
+                                CoverArtView(url: coverURL, size: 120, isCircle: true)
+                                    .shadow(color: .black.opacity(0.2), radius: 10)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(vm.artist?.coverArt == nil)
+                            .help(String(localized: "artwork_open"))
+                            .accessibilityLabel(String(localized: "artwork_open"))
+                            .sheet(isPresented: $isShowingArtwork) {
+                                ArtworkViewerView(
+                                    coverArtId: vm.artist?.coverArt,
+                                    title: vm.artist?.name ?? artistName
+                                )
+                            }
 
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(vm.artist?.name ?? artistName)

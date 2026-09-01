@@ -41,6 +41,7 @@ struct ArtistDetailView: View {
     @State private var downloadedAlbumCounts: [String: Int] = [:]
     @State private var shareURL: IdentifiableURL?
     @State private var songPlaylistIds: SongPlaylistIds?
+    @State private var isShowingArtwork = false
 
     private var sortOption: AlbumSortOption {
         AlbumSortOption(rawValue: sortRaw) ?? .newest
@@ -184,6 +185,9 @@ struct ArtistDetailView: View {
             }
         }
         .shelveToast($currentToast)
+        .fullScreenCover(isPresented: $isShowingArtwork) {
+            ArtworkViewerView(coverArtId: artist.coverArt, title: artist.name)
+        }
         .sheet(item: $shareURL) { wrapped in
             ActivityShareSheet(items: [wrapped.url])
         }
@@ -256,8 +260,15 @@ struct ArtistDetailView: View {
     private var artistHeader: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 16) {
-                AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
-                    .frame(width: 100, height: 100)
+                Button {
+                    isShowingArtwork = true
+                } label: {
+                    AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
+                        .frame(width: 100, height: 100)
+                }
+                .buttonStyle(.plain)
+                .disabled(artist.coverArt == nil)
+                .accessibilityLabel(String(localized: "artwork_open"))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(artist.name)
                         .font(.title2).bold()
