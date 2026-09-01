@@ -25,6 +25,10 @@ struct ArtistDetailView: View {
     @State private var biography: String?
     @State private var isLoading = true
     @State private var errorMessage: String?
+    /// True while the page shows only what is downloaded on this device,
+    /// because the server could not be reached. Without saying so, a failed
+    /// `getArtist` looks like a small but complete discography.
+    @State private var isShowingDownloadsOnly = false
     @State private var showError = false
     @State private var currentToast: ShelveToast?
     @State private var searchQuery = ""
@@ -102,6 +106,21 @@ struct ArtistDetailView: View {
 
     private var shortReleases: [Album] {
         ArtistDiscography.filter(sortedAlbums, to: .singlesAndEPs)
+    }
+
+    /// Says out loud that the page fell back to the device's downloads.
+    @ViewBuilder
+    private var downloadsOnlyNotice: some View {
+        if isShowingDownloadsOnly, !offlineMode.isOffline {
+            Section {
+                Label(String(localized: "showing_downloads_only"), systemImage: "wifi.exclamationmark")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+        }
     }
 
     /// Newest by release year, then by the date the server first saw it.
@@ -421,6 +440,8 @@ struct ArtistDetailView: View {
                         .listRowSeparator(.hidden)
                 }
             } else {
+                downloadsOnlyNotice
+
                 if let latestRelease {
                     Section {
                         ArtistLatestReleaseCard(album: latestRelease, accentColor: accentColor)
@@ -548,6 +569,8 @@ struct ArtistDetailView: View {
                         .listRowSeparator(.hidden)
                 }
             } else if !filteredAlbums.isEmpty {
+                downloadsOnlyNotice
+
                 Section {
                     if !releaseGroups.isEmpty {
                         ArtistReleaseGroupPicker(selection: $releaseGroup, groups: releaseGroups)
@@ -897,6 +920,7 @@ struct ArtistDetailView: View {
             }
 
             detail = loadedDetail
+            isShowingDownloadsOnly = false
             topSongs = loadedTopSongs
             biography = info?.biography?.strippingHTML
             // Servers can list a track/featured artist with no album of their
@@ -932,6 +956,7 @@ struct ArtistDetailView: View {
             coverArt: local.coverArtId,
             album: albumsAsModel
         )
+        isShowingDownloadsOnly = true
     }
 
     private func fetchAllSongs(from albums: [Album]) async -> [Song] {
