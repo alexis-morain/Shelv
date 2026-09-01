@@ -296,7 +296,8 @@ struct ArtistDetailView: View {
             Task {
                 let songs = await fetchAllSongs(from: albums)
                 guard !songs.isEmpty else { return }
-                player.play(songs: songs, startIndex: 0)
+                let ordered = ArtistPlayOrder.songs(topSongs: topSongs, discography: songs)
+                player.play(songs: ordered, startIndex: 0)
             }
         } label: {
             Label(String(localized: "play"), systemImage: "play.fill")
