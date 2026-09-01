@@ -194,11 +194,21 @@ final class SubsonicResponseCompatibilityTests: XCTestCase {
         let gate = SubsonicResponseRequestGate()
         let counter = AsyncCounter()
 
+        let firstStarted = AsyncSignal()
+
         async let first = gate.data(for: "server|getAlbumList2|xml") {
             await counter.increment()
+            await firstStarted.signal()
             try await Task.sleep(for: .milliseconds(50))
             return Data("xml".utf8)
         }
+
+        // `async let` does not promise to start its children in source order.
+        // Without waiting here the two calls race for the gate, and when the
+        // second one wins it becomes the request everybody waits on, so both
+        // get "other". Measured on an unmodified tree: 2 failures in 10 runs.
+        await firstStarted.wait()
+
         async let second = gate.data(for: "server|getAlbumList2|xml") {
             await counter.increment()
             return Data("other".utf8)
@@ -513,5 +523,25 @@ private actor AsyncCounter {
 
     func increment() {
         value += 1
+    }
+}
+
+/// Lets a test wait until an operation has really started, rather than assume
+/// the order in which `async let` happens to start its children.
+private actor AsyncSignal {
+    private var hasFired = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func signal() {
+        guard !hasFired else { return }
+        hasFired = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+
+    func wait() async {
+        guard !hasFired else { return }
+        await withCheckedContinuation { waiters.append($0) }
     }
 }
