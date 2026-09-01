@@ -485,7 +485,6 @@ struct LibraryView: View {
 
     // MARK: - Favoriten
 
-    @ViewBuilder
     private var hasNoFavoritePlayback: Bool {
         store.favoriteAlbums.isEmpty && store.favoriteSongs.isEmpty
     }
